@@ -71,10 +71,7 @@ private:
 double solvn::r(vector<double>& point1, vector<double>& point2)
 {
 	double r = 0;
-	//------------------------------------
-	if (point1.size() != point2.size())
-		return -1;
-	//-------------------------------------
+	
 	for (int i = 0; i < point1.size(); i++)
 	{
 		r += (point1[i] - point2[i]) * (point1[i] - point2[i]);
