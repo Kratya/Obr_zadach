@@ -66,6 +66,10 @@ private:
 	int Gauss(vector<vector<double>>& A, vector<double>& b, int N);
 	double Get_norm(vector<double>& point1);
 	int Inverse_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path);
+	//---------------------------------------------------------------------------------------------------------------
+	double dF_dt(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff, int id_I);
+	int Get_F_on_receiver(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff);
+	int Get_F_on_receiver(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff, vector<double> b);
 };
 
 double solvn::r(vector<double>& point1, vector<double>& point2)
@@ -95,7 +99,30 @@ double solvn::Get_func(vector<Source>& AB, vector<Receiver>& MN)
 
 	return func;
 }
+//---------------------------------------------------------------------------------------------------------------
+double solvn::dF_dt(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff, int id_I)
+{
+	return (AB[id_I].I * Acoeff + Bcoeff);
+}
 
+int solvn::Get_F_on_receiver(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff)
+{
+	double F = 0;
+
+	F = (AB[0].I * AB[0].I * Acoeff + AB[0].I * Bcoeff + Ccoeff);
+	MN.V = F;
+	return 0;
+}
+
+int solvn::Get_F_on_receiver(vector<Source>& AB, Receiver& MN, double Acoeff, double Bcoeff, double Ccoeff, vector<double> b)
+{
+	double F = 0;
+
+	F = (AB[0].I * AB[0].I * Acoeff + AB[0].I * Bcoeff + Ccoeff + b[0]);
+	MN.V = F;
+	return 0;
+}
+//---------------------------------------------------------------------------------------------------------------
 double solvn::dV_dI(vector<Source>& AB, Receiver& MN, double sigma, int id_I)
 {
 	return (((1. / r(MN.M, AB[id_I].B) - 1. / r(MN.M, AB[id_I].A)) -
