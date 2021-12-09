@@ -23,16 +23,13 @@
     <Text Include="params.txt">
       <Filter>Исходные файлы</Filter>
     </Text>
-    <Text Include="recivers.txt">
-      <Filter>Исходные файлы</Filter>
-    </Text>
-    <Text Include="sources.txt">
-      <Filter>Исходные файлы</Filter>
-    </Text>
     <Text Include="startv.txt">
       <Filter>Исходные файлы</Filter>
     </Text>
-    <Text Include="sigma.txt">
+    <Text Include="fvalues.txt">
+      <Filter>Исходные файлы</Filter>
+    </Text>
+    <Text Include="tnet.txt">
       <Filter>Исходные файлы</Filter>
     </Text>
   </ItemGroup>

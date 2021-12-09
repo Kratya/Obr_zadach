@@ -142,10 +142,9 @@
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <Text Include="tnet.txt" />
     <Text Include="params.txt" />
-    <Text Include="recivers.txt" />
-    <Text Include="sigma.txt" />
-    <Text Include="sources.txt" />
+    <Text Include="fvalues.txt" />
     <Text Include="startv.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

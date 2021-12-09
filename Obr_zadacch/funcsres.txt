@@ -1,0 +1,12 @@
+29	29	29	
+2	2	2	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
+-nan(ind)	-nan(ind)	-nan(ind)	
