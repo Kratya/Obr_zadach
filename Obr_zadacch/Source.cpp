@@ -1,8 +1,75 @@
+#define _USE_MATH_DEFINES
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <cmath>
+#include <iomanip>
 
 using namespace std;
+
+/// <summary>
+/// Вывод матрицы в файл
+/// </summary>
+/// <param name="A"> - Матрица для вывода</param>
+/// <param name="fileName"> - Имя файла, куда выводить (Относительное или абсолютное)</param>
+void writeMatrix(vector<vector<double>> A, string fileName)
+{
+	ofstream stream;
+	stream.open(fileName);
+	int n = A.size();
+	for (int q = 0; q < n; q++)
+	{
+		for (int p = 0; p < n; p++)
+		{
+			stream << A[q][p] << " ";
+		}
+		stream << endl;
+	}
+	stream.close();
+}
+
+/// <summary>
+/// Вывод матрицы в консоль
+/// </summary>
+/// <param name="A"> - Матрица для вывода</param>
+void writeMatrix(vector<vector<double>> A)
+{
+	int n = A.size();
+	for (int q = 0; q < n; q++)
+	{
+		for (int p = 0; p < n; p++)
+		{
+			cout << A[q][p] << " ";
+		}
+		cout << endl;
+	}
+}
+
+/// <summary>
+/// Вывод вектора в файл
+/// </summary>
+/// <param name="v"> - Вектор для вывода</param>
+/// <param name="fileName"> - Имя файла, куда выводить (Относительное или абсолютное)</param>
+void writeVector(vector<double> v, string fileName)
+{
+	ofstream stream;
+	stream.open(fileName);
+	int n = v.size();
+	for (int i = 0; i < n; i++)
+		stream << v[i] << endl;
+	stream.close();
+}
+
+/// <summary>
+/// Вывод вектора в консоль
+/// </summary>
+/// <param name="v"> - Вектор для вывода</param>
+void writeVector(vector<double> v)
+{
+	int n = v.size();
+	for (int i = 0; i < n; i++)
+		cout << v[i] << endl;
+}
 
 class solvn
 {
@@ -10,112 +77,152 @@ public:
 	solvn() {};
 	~solvn() {};
 
+	/// <summary>
+	/// Инициализация модели (Чтение фходных данных)
+	/// </summary>
 	void model_init();
+
+	/// <summary>
+	/// Решение обратной задачи
+	/// </summary>
 	void model_solve();
 
 private:
-	const double PI = 3.1415926535897932;
 	int n_params = 3;
 	int max_iter = 100;
 	double eps_func = 1E-8;
 	double eps_dif = 1E-14;
-	double alpha = 1E-20;
+	//double alpha = 1E-20;
+	double alpha = 1E-8;
 	double sigma = 0;
 
-	double Acoeff, Bcoeff, Ccoeff, Fq;
-	double Acoeff_prev, Bcoeff_prev, Ccoeff_prev;
-	struct FuncStruct
+	int flag_F; // Иницилизированна ли модель или нет
+
+	double Fq;
+	//double Acoeff_prev, Bcoeff_prev, Ccoeff_prev;
+
+	struct CoeffStruct
 	{
-		double Fval;
-		double Fval_true;
-		double Tval;
-	};
-	vector<FuncStruct> Fvec;
+		double Acoeff, Bcoeff, Ccoeff;
 
-	struct Receiver
-	{
-		vector<double> M, N;
-		double V, V_true;
-
-
-		Receiver()
+		friend CoeffStruct operator+(CoeffStruct C1, CoeffStruct C2)
 		{
-			M.resize(3);
-			N.resize(3);
-			V = 0;
-			V_true = 0;
+			CoeffStruct tmpCoeff;
+			tmpCoeff.Acoeff = C1.Acoeff + C2.Acoeff;
+			tmpCoeff.Bcoeff = C1.Bcoeff + C2.Bcoeff;
+			tmpCoeff.Ccoeff = C1.Ccoeff + C2.Ccoeff;
+
+			return tmpCoeff;
+		}
+
+		friend CoeffStruct operator*(CoeffStruct C1, double aC)
+		{
+			CoeffStruct tmpCoeff;
+			tmpCoeff.Acoeff = C1.Acoeff * aC;
+			tmpCoeff.Bcoeff = C1.Bcoeff * aC;
+			tmpCoeff.Ccoeff = C1.Ccoeff * aC;
+
+			return tmpCoeff;
+		}
+
+		CoeffStruct operator=(CoeffStruct C1)
+		{
+			this->Acoeff = C1.Acoeff;
+			this->Bcoeff = C1.Bcoeff;
+			this->Ccoeff = C1.Ccoeff;
+
+			return *this;
 		}
 	};
 
-	struct Source
-	{
-		vector<double> A, B;
-		double I, I_prev;
+	vector<double>  Fval,
+		Fval_true, // Истинные значения функции на сетке
+		Tval; // Узлы сетки
 
-		Source()
-		{
-			A.resize(3);
-			B.resize(3);
-			I = 0;
-			I_prev = 0;
-		}
-	};
+	CoeffStruct TrueCoeffs, // Истинные значения искомых коэффициентов
+		ResCoeffs,
+		DiffCoeffs,
+		PrevCoeffs;
 
-	vector<Receiver> MN;
-	vector<Source> AB;
-
-	double r(vector<double>& point1, vector<double>& point2);
-	double Get_func(vector<Source>& AB, vector<Receiver>& MN);
-	double dV_dI(vector<Source>& AB, Receiver& MN, double sigma, int id_I);
-	int Get_V_on_receiver(vector<Source>& AB, Receiver& MN, double sigma);
-	int Get_V_on_receiver(vector<Source>& AB, Receiver& MN, double sigma, vector<double> b);
-	int Input_data(vector<Source>& AB, vector<Receiver>& MN, double& sigma, string path);
-	int Direct_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path);
-	int Direct_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path, vector<double> b);
+	/// <summary>
+	/// Зануление матрицы СЛАУ и правой части
+	/// </summary>
+	/// <param name="A"> - Матрица СЛАУ</param>
+	/// <param name="b"> - Вектор правой части</param>
 	void Clear_SLAU(vector<vector<double>>& A, vector<double>& b);
-	int Gauss(vector<vector<double>>& A, vector<double>& b, int N);
+
+	/// <summary>
+	/// Решение СЛАУ методом Гаусса (Недореализован)
+	/// </summary>
+	/// <param name="A"> - Матрица СЛАУ</param>
+	/// <param name="b"> - Вектор правой части</param>
+	/// <param name="x"> - Вектор для записи решения</param>
+	/// <param name="N"> - Размерность СЛАУ</param>
+	/// <returns></returns>
+	int Gauss(vector<vector<double>>& A, vector<double>& b, vector<double>& x, int N);
+
+	/// <summary>
+	/// Расчёт нормы вектора
+	/// </summary>
+	/// <param name="point1"> - Вектор, норму которого необходимо расчитать</param>
+	/// <returns> - Норма вектора</returns>
 	double Get_norm(vector<double>& point1);
-	int Inverse_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path);
-	//---------------------------------------------------------------------------------------------------------------
-	double Get_func(vector<FuncStruct> MFvec);
-	double dF_dt(double t, int numCoeff);
-	int Get_F_on_receiver(FuncStruct &MF, double t);
-	int Get_F_on_receiver(FuncStruct &MF, double t, vector<double> &b);
-	int Input_data(vector<FuncStruct> &MFvec, string path);
-	int Direct_task(vector<FuncStruct> &MFvec, string path);
-	int Direct_task(vector<FuncStruct> &MFvec, string path, vector<double> b);
-	int Inverse_task(vector<FuncStruct> &MFvec, string path);
+	//------------------------------------
+
+	/// <summary>
+	/// Расчёт приращения коэффициента для численного расчёта производных целевой функции от коэффициентов
+	/// </summary>
+	void Calc_dCoeff();
+	double Get_func(vector<double> MFval, vector<double> MFval_true);
+
+	/// <summary>
+	/// Аналитический расчёт производных целевой функции по искомым коэффициентам
+	/// </summary>
+	/// <param name="t"> - Точка, значение производной функции по параметру в которой нужно рассчитать</param>
+	/// <param name="MyCoeffs"> - Коэффициенты, по которым дифференциируется функция</param>
+	/// <param name="numCoeff"> - Номер параметра по которому ищеться производная</param>
+	/// <returns></returns>
+	double dF_dt(double t, CoeffStruct MyCoeffs, int numCoeff);
+
+	/// <summary>
+	/// Численный расчёт производных целевой функции по искомым коэффициентам
+	/// </summary>
+	/// <param name="t"> - Точка, значение производной функции по параметру в которой нужно рассчитать</param>
+	/// <param name="MyCoeffs"> - Коэффициенты, по которым дифференциируется функция</param>
+	/// <param name="numCoeff"> - Номер параметра по которому ищеться производная</param>
+	/// <returns></returns>
+	double F_dCoeff(double t, CoeffStruct MyCoeffs, int numCoeff);
+
+	/// <summary>
+	/// Целевая функция
+	/// </summary>
+	/// <param name="t"> - Значение аргумента, по которому необходимо вычислить значение функции</param>
+	/// <param name="MyCoeffs"> - Коэффициенты для вычисления целевой функции</param>
+	/// <returns></returns>
+	double Formul(double t, CoeffStruct MyCoeffs);
+	/// <summary>
+	/// Вроде как тоже целевая функция
+	/// </summary>
+	/// <param name="t"> - Значение аргумента в котором необходимо узнать значение функции</param>
+	/// <param name="MyCoeffs"> - Значение коэффициентов целевой функции</param>
+	/// <returns> - Значение целевой функции</returns>
+	double Receive_F(double t, CoeffStruct MyCoeffs);
+
+	/// <summary>
+	/// Вроде как тоже целевая функция с зависимостью от решения
+	/// </summary>
+	/// <param name="t"> - Значение аргумента в котором необходимо узнать значение функции</param>
+	/// <param name="MyCoeffs"> - Значение коэффициентов целевой функции</param>
+	/// <returns> - Значение целевой функции</returns>
+	double Receive_F(double t, CoeffStruct MyCoeffs, vector<double>& b);
+	int Input_data(vector<double>& MFval, vector<double>& MFval_true, vector<double>& MTval, string path);
+	int Direct_task(vector<double>& MFval, vector<double>& MTval, CoeffStruct MyCoeffs, string path);
+	//int Direct_task(vector<double>& MFval, vector<double>& MTval, CoeffStruct MyCoeff, string path, vector<double> b);
+	int Inverse_task(string path);
 };
 
-double solvn::r(vector<double>& point1, vector<double>& point2)
-{
-	double r = 0;
-	
-	for (int i = 0; i < point1.size(); i++)
-	{
-		r += (point1[i] - point2[i]) * (point1[i] - point2[i]);
-	}
-	r = sqrt(r);
-	return r;
-}
-
-double solvn::Get_func(vector<Source>& AB, vector<Receiver>& MN)
-{
-	double func = 0;
-	for (int i = 0; i < AB.size(); i++)
-	{
-		func += (AB[i].I - AB[i].I_prev);
-	}
-	func *= alpha;
-	for (int i = 0; i < MN.size(); i++)
-	{
-		func += (MN[i].V - MN[i].V_true) * (MN[i].V - MN[i].V_true) / (MN[i].V_true * MN[i].V_true);
-	}
-
-	return func;
-}
-//---------------------------------------------------------------------------------------------------------------
-double solvn::Get_func(vector<FuncStruct> MFvec)
+//----------------------------------------
+double solvn::Get_func(vector<double> MFval, vector<double> MFval_true)
 {
 	double func = 0;
 	//for (int i = 0; i < MFvec.size(); i++)
@@ -130,29 +237,33 @@ double solvn::Get_func(vector<FuncStruct> MFvec)
 	}*/
 
 
-	for (int i = 0; i < MFvec.size(); i++)
+	for (int i = 0; i < MFval.size(); i++)
 	{
-		func += (MFvec[i].Fval - MFvec[i].Fval_true) * (MFvec[i].Fval - MFvec[i].Fval_true) / (MFvec[i].Fval_true * MFvec[i].Fval_true);
+		func += (MFval[i] - MFval_true[i]) * (MFval[i] - MFval_true[i]) / (MFval_true[i] * MFval_true[i]);
 	}
+
+	func += alpha * (PrevCoeffs.Acoeff - ResCoeffs.Acoeff) * (PrevCoeffs.Acoeff - ResCoeffs.Acoeff);
+	func += alpha * (PrevCoeffs.Bcoeff - ResCoeffs.Bcoeff) * (PrevCoeffs.Acoeff - ResCoeffs.Acoeff);
+	func += alpha * (PrevCoeffs.Ccoeff - ResCoeffs.Ccoeff) * (PrevCoeffs.Acoeff - ResCoeffs.Acoeff);
 
 	return func;
 }
-
-double solvn::dF_dt(double t, int numCoeff)
+double solvn::dF_dt(double t, CoeffStruct MyCoeffs, int numCoeff)
 {
 	double dF = 0;
 
 	switch (numCoeff)
 	{
 	case 0:
-		dF = 2 * Acoeff;
-		//dF = t * t;
-		//dF = cos(Acoeff);
+		//dF = 2 * MyCoeffs.Acoeff * t;
+		dF = t * t;
+		//dF = t * t * MyCoeffs.Acoeff;
+		//dF = cos(MyCoeffs.Acoeff) * t;
 		break;
 	case 1:
-		dF = 2 * Bcoeff;
+		//dF = 2 * MyCoeffs.Bcoeff;
 		//dF = t;
-		//dF = -sin(Bcoeff);
+		//dF = -sin(MyCoeffs.Bcoeff);
 		break;
 	case 2:
 		//dF = 1;
@@ -164,77 +275,157 @@ double solvn::dF_dt(double t, int numCoeff)
 	return dF;
 }
 
-int solvn::Get_F_on_receiver(FuncStruct &MF, double t)
+void solvn::Calc_dCoeff()
 {
-	MF.Fval = (Acoeff* Acoeff +Bcoeff*Bcoeff);
-	//MF.Fval = (t * t * Acoeff + t * Bcoeff + Ccoeff);
-	//MF.Fval = (Acoeff*t*t);
-	//MF.Fval = (sin(Acoeff)+cos(Bcoeff));
+	DiffCoeffs = (ResCoeffs * 0.005);
 
-	return 0;
+	if (DiffCoeffs.Acoeff < eps_func)
+		DiffCoeffs.Acoeff = eps_func;
+	if (DiffCoeffs.Bcoeff < eps_func)
+		DiffCoeffs.Bcoeff = eps_func;
+	if (DiffCoeffs.Ccoeff < eps_func)
+		DiffCoeffs.Ccoeff = eps_func;
 }
 
-int solvn::Get_F_on_receiver(FuncStruct &MF, double t, vector<double> &b)
+double solvn::Formul(double t, CoeffStruct MyCoeffs)
 {
-	MF.Fval = (Acoeff + b[0])* (Acoeff + b[0]) + (Bcoeff+ b[1])* (Bcoeff + b[1]);
-	//MF.Fval = (t * t * (Acoeff+b[0]) + t * (Bcoeff+b[1]) + Ccoeff + b[2]);
-	//MF.Fval = (t * t * (Acoeff + b[0]) );
-	//MF.Fval = ((sin(Acoeff + b[0]))+ (cos(Bcoeff+ b[1])));
-	return 0;
+	//return (MyCoeffs.Acoeff * MyCoeffs.Acoeff * t + MyCoeffs.Bcoeff * MyCo-effs.Bcoeff);
+	//return (t * t * MyCoeffs.Acoeff + t * MyCoeffs.Bcoeff + MyCoeffs.Ccoeff);
+	//return (MyCoeffs.Acoeff * MyCoeffs.Acoeff * t * t);
+	//return (log(MyCoeffs.Acoeff) * t * t);
+	//return (sin(MyCoeffs.Acoeff)*t+cos(MyCoeffs.Bcoeff));
+	//return sin(MyCoeffs.Acoeff)* t + cos(MyCoeffs.Bcoeff);
+	return MyCoeffs.Acoeff * MyCoeffs.Acoeff * t + MyCoeffs.Bcoeff * MyCoeffs.Bcoeff + MyCoeffs.Ccoeff;
 }
 
-int solvn::Input_data(vector<FuncStruct> &MFvec, string path)
+double solvn::F_dCoeff(double t, CoeffStruct MyCoeffs, int numCoeff)
+{
+	double dF = 0;
+	Calc_dCoeff();
+
+	CoeffStruct SummCoeff = (ResCoeffs + DiffCoeffs);
+	CoeffStruct t_Coeff = ResCoeffs;
+
+	switch (numCoeff)
+	{
+	case 0:
+		// A
+		t_Coeff.Acoeff += DiffCoeffs.Acoeff;
+		dF = (Formul(t, t_Coeff) - Formul(t, ResCoeffs)) / DiffCoeffs.Acoeff;
+		break;
+	case 1:
+		// B
+		t_Coeff.Bcoeff += DiffCoeffs.Bcoeff;
+		dF = (Formul(t, t_Coeff) - Formul(t, ResCoeffs)) / DiffCoeffs.Bcoeff;
+		break;
+	case 2:
+		// С
+		t_Coeff.Ccoeff += DiffCoeffs.Ccoeff;
+		dF = (Formul(t, t_Coeff) - Formul(t, ResCoeffs)) / DiffCoeffs.Ccoeff;
+		break;
+	default:
+		break;
+	}
+
+	return dF;
+}
+
+
+double solvn::Receive_F(double t, CoeffStruct MyCoeffs)
+{
+	//MFval = MyCoeffs.Acoeff * t * t + MyCoeffs.Bcoeff * t + MyCoeffs.Ccoeff;
+	//MFval = (t * t * MyCoeffs.Acoeff + t * MyCoeffs.Bcoeff + MyCoeffs.Ccoeff);
+	//MFval = (MyCoeffs.Acoeff * MyCoeffs.Acoeff *t*t);
+	//return (log(MyCoeffs.Acoeff) * t * t);
+	//MFval = (sin(MyCoeffs.Acoeff)*t+cos(MyCoeffs.Bcoeff));
+	//return 0;
+	//return sin(MyCoeffs.Acoeff) * t + cos(MyCoeffs.Bcoeff);
+	return MyCoeffs.Acoeff * MyCoeffs.Acoeff * t + MyCoeffs.Bcoeff * MyCoeffs.Bcoeff + MyCoeffs.Ccoeff;
+}
+
+double solvn::Receive_F(double t, CoeffStruct MyCoeffs, vector<double>& b)
+{
+
+	//MFval = (MyCoeffs.Acoeff + b[0]) * t * t + (MyCoeffs.Bcoeff+ b[1]) * t + My-Coeffs.Ccoeff + b[2];
+	//MFval = (t * t * (MyCoeffs.Acoeff + b[0]) + t * (MyCoeffs.Bcoeff + b[1]) + My-Coeffs.Ccoeff + b[2]);
+	//return (t * t * log(MyCoeffs.Acoeff + b[0]));
+	//MFval = ((sin(MyCoeffs.Acoeff + b[0]))*t+ (cos(MyCoeffs.Bcoeff+ b[1])));
+	//return 0;
+	//return sin(MyCoeffs.Acoeff + b[0]) * t + cos(MyCoeffs.Bcoeff + b[1]);
+	return MyCoeffs.Acoeff * MyCoeffs.Acoeff * t + MyCoeffs.Bcoeff * MyCoeffs.Bcoeff + MyCoeffs.Ccoeff;
+}
+
+int solvn::Input_data(vector<double>& MFval, vector<double>& MFval_true, vector<double>& MTval, string path)
 {
 	ifstream inf;
-	int tmp_int, flag_F, coeff, n_c;
+	int tmp_int, coeff, n_c;
 	double tmp_dbl;
 
-
+	// Чтение сетки
 	inf.open(path + "tnet.txt", ios_base::in);
 	if (inf)
 	{
-		inf >> tmp_int;
-		//===================================================================================================
-		MFvec.resize(tmp_int);
-		//===================================================================================================
+		inf >> tmp_int; // Количество узлов
+		//=========================
+		MFval.resize(tmp_int);
+		MFval_true.resize(tmp_int);
+		MTval.resize(tmp_int);
+		//=========================
+
+		//Чтение узлов
 		for (int i = 0; i < tmp_int; i++)
-			inf >> MFvec[i].Tval;
+			inf >> Tval[i];
 	}
 	inf.close();
 	inf.clear();
 
+	// Чтение параметров решателя
 	inf.open(path + "params.txt", ios_base::in);
 	if (inf)
 	{
-		inf >> n_params;
-		inf >> max_iter;
-		inf >> eps_func;
-		inf >> eps_dif;
+
+		inf >> n_params; // Количество параметров
+		inf >> max_iter; // Максимальное количество итераций при решении обратной задачи
+		inf >> eps_func; // Минимальное значение функционала
+		inf >> eps_dif; // Минимальоне значение нормы вектора b (Может быть невязки?)
 
 	}
 	inf.close();
 	inf.clear();
 
+	// Считываем способ получения истинных значений функции (true - из файла, false - программно, просто подставляем истинные значения параметров в уравнение)
 	inf.open(path + "fvalues.txt", ios_base::in);
 	if (!inf)
 	{
 		cout << "Can't open " << path + "fvalues.txt";
 		return 1;
 	}
-	inf >> flag_F;
-	inf >> tmp_int;
-	//===================================================================================================
+	inf >> flag_F; // Способ получения истинных значений функции (true - из файла, false - программно, просто подставляем истинные значения параметров в уравнение)
+	//============================
 	//MFvec.resize(tmp_int);
-	//===================================================================================================
+	//============================
+
 	if (flag_F) {
 		for (int i = 0; i < tmp_int; i++)
 		{
-			inf >> MFvec[i].Fval_true;
+			inf >> Fval_true[i]; // Истинные значения функции на сетке
 		}
+	}
+	else
+	{
+		inf.close();
+		inf.clear();
+		// Считываем истинные коэффициенты из файла
+		inf.open(path + "coeffs.txt", ios_base::in);
+
+		inf >> TrueCoeffs.Acoeff; // Истинное значение коэффициента при t^2 
+		inf >> TrueCoeffs.Bcoeff; // Истинное значение коэффициента при t
+		inf >> TrueCoeffs.Ccoeff; // Истинное значение свободного коэффициента 
 	}
 	inf.close();
 	inf.clear();
 
+	// Считываем начальное приближение коэффициентов
 	inf.open(path + "startv.txt", ios_base::in);
 	if (!inf)
 	{
@@ -242,28 +433,43 @@ int solvn::Input_data(vector<FuncStruct> &MFvec, string path)
 	}
 	else
 	{
-		inf >> Acoeff;
-		inf >> Bcoeff;
-		inf >> Ccoeff;
+		inf >> ResCoeffs.Acoeff; // Начальное приближение коэффициента при t^2 
+		inf >> ResCoeffs.Bcoeff; // Начальное приближение коэффициента при t
+		inf >> ResCoeffs.Ccoeff; // Начальное приближение свободного коэффициента 
 	}
+
 	inf.close();
 	inf.clear();
 
+	cout << "-----True Parameters-----" << endl;
+	cout << "True A = " << TrueCoeffs.Acoeff << endl;
+	cout << "True B = " << TrueCoeffs.Bcoeff << endl;
+	cout << "True C = " << TrueCoeffs.Ccoeff << endl;
+	cout << endl;
+
+	cout << "-----Init mean of Parameters-----" << endl;
+	cout << "Init A = " << ResCoeffs.Acoeff << endl;
+	cout << "Init B = " << ResCoeffs.Bcoeff << endl;
+	cout << "Init C = " << ResCoeffs.Ccoeff << endl;
+	cout << endl;
+
 	return 0;
 }
 
-int solvn::Direct_task(vector<FuncStruct> &MFvec, string path)
+int solvn::Direct_task(vector<double>& MFval, vector<double>& MTval, CoeffStruct MyCoeffs, string path)
 {
 	ofstream opf;
-	for (int i = 0; i < MFvec.size(); i++)
+	for (int i = 0; i < MFval.size(); i++)
 	{
-		Get_F_on_receiver(MFvec[i], MFvec[i].Tval);
+		MFval[i] = Receive_F(MTval[i], MyCoeffs);
 	}
 	opf.open(path + "funcsres.txt", ios_base::app);
-	for (int i = 0; i < MFvec.size(); i++)
+
+	for (int i = 0; i < MFval.size(); i++)
 	{
-		opf << MFvec[i].Fval << "\t";
+		opf << MFval[i] << "\t";
 	}
+
 	opf << "\n";
 	opf.close();
 	opf.clear();
@@ -271,17 +477,19 @@ int solvn::Direct_task(vector<FuncStruct> &MFvec, string path)
 	return 0;
 }
 
-int solvn::Direct_task(vector<FuncStruct>& MFvec, string path, vector<double> b)
+/*
+int solvn::Direct_task(vector<double>& MFval, vector<double>& MTval, CoeffStruct MyCoeffs, string path, vector<double> dP)
 {
 	ofstream opf;
-	for (int i = 0; i < MFvec.size(); i++)
+	for (int i = 0; i < MFval.size(); i++)
 	{
-		Get_F_on_receiver(MFvec[i], MFvec[i].Tval, b);
+		MFval[i] = Receive_F(MTval[i], MyCoeffs, dP);
 	}
 	opf.open(path + "funcsres.txt", ios_base::app);
-	for (int i = 0; i < MFvec.size(); i++)
+
+	for (int i = 0; i < MFval.size(); i++)
 	{
-		opf << MFvec[i].Fval << "\t";
+		opf << MFval[i] << "\t";
 	}
 	opf << "\n";
 	opf.close();
@@ -289,315 +497,138 @@ int solvn::Direct_task(vector<FuncStruct>& MFvec, string path, vector<double> b)
 
 	return 0;
 }
+*/
 
-int solvn::Inverse_task(vector<FuncStruct>& MFvec, string path)
+int solvn::Inverse_task(string path)
 {
 	ofstream opf(path + "results.txt", ios_base::out | ios_base::trunc);
 	vector<vector<double>> A(n_params, vector<double>(n_params));
 	vector<double> b(n_params);
+	vector<double> dP(n_params); // - diff of Parameters - Синоним для повышения читабельности кода и экономии памяти
+
+	PrevCoeffs.Acoeff = ResCoeffs.Acoeff;
+	PrevCoeffs.Bcoeff = ResCoeffs.Bcoeff;
+	PrevCoeffs.Ccoeff = ResCoeffs.Ccoeff;
+
+	cout << "Launch Inverse_task(...)" << endl;
 
 	double func = 1E+30, prev_func, dif = 1E+30, alpha_loc;
 	int iter_a;
-	if (n_params == MFvec.size())
+	//if (n_params == Fval.size())
+	if (true)
 	{
-		Direct_task(MFvec, path);
-		func = Get_func(MFvec);
+		cout << "Pass check (n_params == Fval.size())" << endl;
+		Direct_task(Fval, Tval, ResCoeffs, path);
+		func = Get_func(Fval, Fval_true);
+		cout << "func = " << func << endl;
+
+		for (int i = 0; i < Fval.size(); i++)
+			cout << "FVal[" << i << "] = " << Fval[i] << endl;
+		for (int i = 0; i < Fval_true.size(); i++)
+			cout << "FVal_true[" << i << "] = " << Fval_true[i] << endl;
+
 		prev_func = func;
+
 		opf << "iter 0: " << '\n';
 		opf << "func = " << func << '\n' << "norma = " << 0 << '\n';
-		opf << "A" << " = " << Acoeff << '\n';
-		opf << "B" << " = " << Bcoeff << '\n';
-		opf << "C" << " = " << Ccoeff << '\n';
+		opf << setprecision(17) << "A" << " = " << ResCoeffs.Acoeff << '\n';
+		opf << setprecision(17) << "B" << " = " << ResCoeffs.Bcoeff << '\n';
+		opf << setprecision(17) << "C" << " = " << ResCoeffs.Ccoeff << '\n';
 		opf << "----------------------------------------------------------------" << endl;
 
 		for (int iter = 1; iter < max_iter && func > eps_func && dif > eps_dif; iter++)
 		{
+			cout << "Pass for1" << endl;
+
 			iter_a = 0;
 			alpha_loc = alpha;
-			do
-			{
+			//do
+			//{
 				// очистить СЛАУ
-				Clear_SLAU(A, b);
-				// собрать СЛАУ
-				for (int q = 0; q < n_params; q++) // 3 == A B C == n_params
-				{
-					for (int p = 0; p < n_params; p++) // 3 == A B C
-					{
-						for (int i = 0; i < MFvec.size(); i++)
-						{
-							A[q][p] += 1 / MFvec[i].Fval_true * dF_dt(MFvec[i].Tval, q) * dF_dt(MFvec[i].Tval, p); // уточнить по времени
-						}
-						if (p == q)
-						{
-							A[q][p] += alpha_loc;
-						}
-					}
-					for (int j = 0; j < MFvec.size(); j++)
-					{
-						b[q] -= 1 / MFvec[j].Fval_true * dF_dt(MFvec[j].Tval, q) * (MFvec[j].Fval - MFvec[j].Fval_true);
-					}
-				}
-
-				cout << "----------A[q][p]-----------" << endl;
-				for (int q = 0; q < n_params; q++)
-				{
-					for (int p = 0; p < n_params; p++)
-					{
-						cout << A[q][p] << " ";
-					}
-					cout << endl;
-				}
-				cout << "------------b[q]------------" << endl;
-				for (int q = 0; q < n_params; q++)
-				{
-					cout << b[q] << endl;
-				}
-				// решить СЛАУ
-				Gauss(A, b, n_params);
-
-				dif = Get_norm(b);
-				Direct_task(MFvec, path, b);
-				prev_func = func;
-				func = Get_func(MFvec);
-				iter_a++;
-				alpha_loc *= 10;
-
-				cout << "------------x[q]------------" << endl;
-				for (int q = 0; q < n_params; q++)
-				{
-					cout << b[q] << endl;
-				}
-
-				Acoeff += b[0];;
-				Bcoeff += b[1];;
-				Ccoeff += b[2];;
-			} while (prev_func < func || iter_a < 10);
-
-			
-			/*
-			for (int i = 0; i < AB.size(); i++)
+			Clear_SLAU(A, b);
+			// собрать СЛАУ
+			for (int q = 0; q < n_params; q++) // 3 == A B C == n_params
 			{
-				AB[i].I += b[i];
+				for (int p = 0; p < n_params; p++) // 3 == A B C
+				{
+					for (int i = 0; i < Fval.size(); i++)
+					{
+						//A[q][p] += dF_dt(Tval[i], ResCoeffs, q) * dF_dt(Tval[i], ResCoeffs, p);
+						//F_dCoeff(double t, CoeffStruct MyCo-effs, int numCoeff):
+						A[q][p] += F_dCoeff(Tval[i], ResCoeffs, q) * F_dCoeff(Tval[i], ResCoeffs, p);
+						//A[q][p] += dF_dt(Tval[i], ResCoeffs, q) * dF_dt(Tval[i], ResCoeffs, p);
+					}
+				}
+				for (int j = 0; j < Fval.size(); j++)
+				{
+					//b[q] -=  dF_dt(Tval[j], ResCoeffs, q) * (Fval[j] - Fval_true[j]);
+					//F_dCoeff(double t, CoeffStruct MyCoeffs, int numCoeff):
+					b[q] -= F_dCoeff(Tval[j], ResCoeffs, q) * (Fval[j] - Fval_true[j]);
+					//b[q] -= dF_dt(Tval[j], ResCoeffs, q) * (Fval[j] - Fval_true[j]);
+				}
+				b[0] -= alpha * (PrevCoeffs.Acoeff - ResCoeffs.Acoeff);
+				//b[1] -= alpha * (PrevCoeffs.Bcoeff - ResCoeffs.Bcoeff);
+				//b[2] -= alpha * (PrevCoeffs.Ccoeff - ResCoeffs.Ccoeff);
 			}
-			*/
+
+			// Добавляем регуляризацию
+			for (int i = 0; i < n_params; i++)
+				A[i][i] += alpha_loc;
+
+			cout << "----------A[q][p]-----------" << endl;
+			writeMatrix(A);
+			cout << "----------------------------" << endl;
+			cout << endl;
+
+			cout << "------------b[q]------------" << endl;
+			writeVector(b);
+			cout << "----------------------------" << endl;
+			cout << endl;
+
+			// решить СЛАУ
+			Gauss(A, b, dP, n_params);
+
+			cout << "------------x[q]------------" << endl;
+			writeVector(dP);
+			cout << "----------------------------" << endl;
+			cout << endl;
+			cout << endl;
+
+			dif = Get_norm(dP);
+
+			PrevCoeffs.Acoeff = ResCoeffs.Acoeff;
+			PrevCoeffs.Bcoeff = ResCoeffs.Bcoeff;
+			PrevCoeffs.Ccoeff = ResCoeffs.Ccoeff;
+
+			ResCoeffs.Acoeff += dP[0];
+			ResCoeffs.Bcoeff += dP[1];
+			//ResCoeffs.Ccoeff += dP[2];
+
+			Direct_task(Fval, Tval, ResCoeffs, path);
+
+			prev_func = func;
+			func = Get_func(Fval, Fval_true);
+			iter_a++;
+			alpha_loc *= 10;
+
+			//} while (prev_func < func || iter_a < 10);
+
 			opf << "iter " << iter << ": " << '\n';
-			/*
-			for (int i = 0; i < AB.size(); i++)
-			{
-				opf << "I" << i + 1 << " = " << AB[i].I << '\n';
-				AB[i].I_prev = AB[i].I;
-			}
-			*/
-			opf << "A" << " = " << Acoeff << '\n';
-			opf << "B" << " = " << Bcoeff << '\n';
-			opf << "C" << " = " << Ccoeff << '\n';
-
-			Acoeff_prev = Acoeff;
-			Bcoeff_prev = Bcoeff;
-			Ccoeff_prev = Ccoeff;
+			opf << setprecision(17) << "A" << " = " << ResCoeffs.Acoeff << '\n';
+			opf << setprecision(17) << "B" << " = " << ResCoeffs.Bcoeff << '\n';
+			opf << setprecision(17) <<"C"  << " = " << ResCoeffs.Ccoeff << '\n';
 
 			opf << "func = " << func << '\n' << "norma = " << dif << '\n';
 			opf << "----------------------------------------------------------------" << endl;
 		}
 	}
 	else
-		cout << "n_params != AB.size()\n";
+		cout << "n_params != MFvec.size()\n";
 	opf.close();
 	opf.clear();
 	return 0;
 }
-//---------------------------------------------------------------------------------------------------------------
-double solvn::dV_dI(vector<Source>& AB, Receiver& MN, double sigma, int id_I)
-{
-	return (((1. / r(MN.M, AB[id_I].B) - 1. / r(MN.M, AB[id_I].A)) -
-		(1. / r(MN.N, AB[id_I].B) - 1. / r(MN.N, AB[id_I].A)))) / (2 * PI * sigma);
-}
-
-int solvn::Get_V_on_receiver(vector<Source>& AB, Receiver& MN, double sigma)
-{
-	double V = 0;
-
-	for (int i = 0; i < AB.size(); i++)
-	{
-		V += AB[i].I * ((1. / r(MN.M, AB[i].B) - 1. / r(MN.M, AB[i].A)) -
-			(1. / r(MN.N, AB[i].B) - 1. / r(MN.N, AB[i].A)));
-	}
-	V /= 2 * PI * sigma;
-	MN.V = V;
-	return 0;
-}
-int solvn::Get_V_on_receiver(vector<Source>& AB, Receiver& MN, double sigma, vector<double> b)
-{
-	double V = 0;
-
-	for (int i = 0; i < AB.size(); i++)
-	{
-		V += (AB[i].I + b[i]) * ((1. / r(MN.M, AB[i].B) - 1. / r(MN.M, AB[i].A)) -
-			(1. / r(MN.N, AB[i].B) - 1. / r(MN.N, AB[i].A)));
-	}
-	V /= 2 * PI * sigma;
-	MN.V = V;
-	return 0;
-}
-
-int solvn::Input_data(vector<Source>& AB, vector<Receiver>& MN, double& sigma, string path)
-{
-	ifstream inf;
-	int tmp_int, flag_I, flag_V, n, net, coeff, n_c;
-	double tmp_dbl;
-
-
-	inf.open(path + "t_net.txt", ios_base::in);
-	if (inf)
-	{
-		inf >> n;
-		for (int i = 0; i < n; i++)
-			inf >> net;
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "coeff.txt", ios_base::in);
-	if (inf)
-	{
-		inf >> n_c;
-		for (int i = 0; i < n; i++)
-			inf >> coeff;
-	}
-	inf.close();
-	inf.clear();
-
-
-	inf.open(path + "params.txt", ios_base::in);
-	if (inf)
-	{
-		inf >> n_params;
-		inf >> max_iter;
-		inf >> eps_func;
-		inf >> eps_dif;
-
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "recivers.txt", ios_base::in);
-	if (!inf)
-	{
-		cout << "Can't open " << path + "recivers.txt";
-		return 1;
-	}
-	inf >> flag_V;
-	inf >> tmp_int;
-	MN.resize(tmp_int);
-	for (int i = 0; i < tmp_int; i++)
-	{
-		for (int j = 0; j < MN[i].M.size(); j++)
-			inf >> MN[i].M[j];
-		for (int j = 0; j < MN[i].N.size(); j++)
-			inf >> MN[i].N[j];
-		if (flag_V)
-			inf >> MN[i].V_true;
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "sources.txt", ios_base::in);
-	if (!inf)
-	{
-		cout << "Can't open " << path + "sources.txt";
-		return 1;
-	}
-	inf >> flag_I;
-	inf >> tmp_int;
-	AB.resize(tmp_int);
-	for (int i = 0; i < tmp_int; i++)
-	{
-		for (int j = 0; j < AB[i].A.size(); j++)
-			inf >> AB[i].A[j];
-		for (int j = 0; j < AB[i].B.size(); j++)
-			inf >> AB[i].B[j];
-		if (flag_I)
-			inf >> AB[i].I;
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "startv.txt", ios_base::in);
-	if (!inf)
-	{
-		cout << "Can't open " << path + "start_value.txt";
-	}
-	else
-	{
-		if (flag_I)
-			inf >> sigma;
-		else
-		{
-			for (int i = 0; i < AB.size(); i++)
-			{
-				inf >> AB[i].I;
-				AB[i].I_prev = AB[i].I;
-			}
-		}
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "sigma.txt", ios_base::in);
-	if (inf)
-	{
-		inf >> tmp_dbl;
-		if (tmp_dbl < 0)
-			sigma = 0;
-		else sigma = tmp_dbl;
-	}
-	inf.close();
-	inf.clear();
-
-	inf.open(path + "volts.txt", ios_base::out | ios_base::trunc);
-	inf.close();
-	inf.clear();
-
-	return 0;
-}
-
-int solvn::Direct_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path)
-{
-	ofstream opf;
-	for (int i = 0; i < MN.size(); i++)
-	{
-		Get_V_on_receiver(AB, MN[i], sigma);
-	}
-	opf.open(path + "volts.txt", ios_base::app);
-	for (int i = 0; i < MN.size(); i++)
-	{
-		opf << MN[i].V << "\t";
-	}
-	opf << "\n";
-	opf.close();
-	opf.clear();
-
-	return 0;
-}
-
-int solvn::Direct_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path, vector<double> b)
-{
-	ofstream opf;
-	for (int i = 0; i < MN.size(); i++)
-	{
-		Get_V_on_receiver(AB, MN[i], sigma, b);
-	}
-	opf.open(path + "volts.txt", ios_base::app);
-	for (int i = 0; i < MN.size(); i++)
-	{
-		opf << MN[i].V << "\t";
-	}
-	opf << "\n";
-	opf.close();
-	opf.clear();
-
-	return 0;
-}
+//------------------------------------------
 
 
 void solvn::Clear_SLAU(vector<vector<double>>& A, vector<double>& b)
@@ -613,7 +644,7 @@ void solvn::Clear_SLAU(vector<vector<double>>& A, vector<double>& b)
 
 }
 
-int solvn::Gauss(vector<vector<double>>& A, vector<double>& b, int N)
+int solvn::Gauss(vector<vector<double>>& A, vector<double>& b, vector<double>& x, int N)
 {
 	// Гаусс
    // приведение к треугольному виду
@@ -623,6 +654,7 @@ int solvn::Gauss(vector<vector<double>>& A, vector<double>& b, int N)
 		for (int i = k + 1; i < N; i++)
 		{
 			t = A[i][k] / A[k][k];
+
 			b[i] -= t * b[k];
 			for (int j = k + 1; j < N; j++)
 			{
@@ -631,15 +663,16 @@ int solvn::Gauss(vector<vector<double>>& A, vector<double>& b, int N)
 		}
 	}
 	b[N - 1] /= A[N - 1][N - 1];
+	x[N - 1] = b[N - 1];
 	// решение СЛАУ с треугольной матрицей
 	for (int k = N - 2; k >= 0; k--)
 	{
 		double sum = 0;
 		for (int j = k + 1; j < N; j++)
 		{
-			sum += A[k][j] * b[j];
+			sum += A[k][j] * x[j];
 		}
-		b[k] = (b[k] - sum) / A[k][k];
+		x[k] = (b[k] - sum) / A[k][k];
 	}
 
 	return 0;
@@ -657,98 +690,18 @@ double solvn::Get_norm(vector<double>& point1)
 	return r;
 }
 
-int solvn::Inverse_task(vector<Source>& AB, vector<Receiver>& MN, double sigma, string path)
-{
-	ofstream opf(path + "results.txt", ios_base::out | ios_base::trunc);
-	vector<vector<double>> A(n_params, vector<double>(n_params));
-	vector<double> b(n_params);
-
-	double func = 1E+30, prev_func, dif = 1E+30, alpha_loc;
-	int iter_a;
-	if (n_params == AB.size())
-	{
-		Direct_task(AB, MN, sigma, path);
-		func = Get_func(AB, MN);
-		prev_func = func;
-		opf << "iter 0: " << '\n';
-		for (int i = 0; i < AB.size(); i++)
-		{
-			opf << "I" << i + 1 << " = " << AB[i].I << '\n';
-		}
-		opf << "func = " << func << '\n' << "norma = " << 0 << '\n';
-
-		for (int iter = 1; iter < max_iter && func > eps_func && dif > eps_dif; iter++)
-		{
-			iter_a = 0;
-			alpha_loc = alpha;
-			do
-			{
-				// очистить СЛАУ
-				Clear_SLAU(A, b);
-				// собрать СЛАУ
-				for (int q = 0; q < n_params; q++)
-				{
-					for (int p = 0; p < n_params; p++)
-					{
-						for (int i = 0; i < MN.size(); i++)
-						{
-							A[q][p] += 1 / MN[i].V_true * dV_dI(AB, MN[i], sigma, q) * dV_dI(AB, MN[i], sigma, p);
-						}
-						if (p == q)
-						{
-							A[q][p] += alpha_loc;
-						}
-					}
-					for (int j = 0; j < MN.size(); j++)
-					{
-						b[q] -= 1 / MN[j].V_true * dV_dI(AB, MN[j], sigma, q) * (MN[j].V - MN[j].V_true);
-					}
-				}
-				// решить СЛАУ
-				Gauss(A, b, n_params);
-
-				dif = Get_norm(b);
-				Direct_task(AB, MN, sigma, path, b);
-				prev_func = func;
-				func = Get_func(AB, MN);
-				iter_a++;
-				alpha_loc *= 10;
-			} while (prev_func < func || iter_a < 10);
-
-			for (int i = 0; i < AB.size(); i++)
-			{
-				AB[i].I += b[i];
-			}
-
-			opf << "iter " << iter << ": " << '\n';
-			for (int i = 0; i < AB.size(); i++)
-			{
-				opf << "I" << i + 1 << " = " << AB[i].I << '\n';
-				AB[i].I_prev = AB[i].I;
-			}
-			opf << "func = " << func << '\n' << "norma = " << dif << '\n';
-		}
-	}
-	else
-		cout << "n_params != AB.size()\n";
-	opf.close();
-	opf.clear();
-	return 0;
-}
-
 void solvn::model_init()
 {
 	string path = "";
-	Input_data(Fvec, path);
+	Input_data(Fval, Fval_true, Tval, path);
 }
 
 void solvn::model_solve()
 {
 	string path = "";
-	//Direct_task(AB, MN, sigma, path);
-	//Inverse_task(AB, MN, sigma, path);
-	//Direct_task(Fvec, path);
-	Inverse_task(Fvec, path);
+	if (!flag_F)
+		Direct_task(Fval_true, Tval, TrueCoeffs, path);
+	Inverse_task(path);
 }
 
 int main()

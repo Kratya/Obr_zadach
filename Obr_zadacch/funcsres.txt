@@ -1,12 +1,15 @@
-29	29	29	
-2	2	2	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
--nan(ind)	-nan(ind)	-nan(ind)	
+8	
+3	
+9.89537	
+14.0316	
+9.38399	
+7.78308	
+7.83322	
+7.99678	
+8.01681	
+8.00315	
+7.9988	
+7.99948	
+8.00004	
+8.00006	
+8.00001	

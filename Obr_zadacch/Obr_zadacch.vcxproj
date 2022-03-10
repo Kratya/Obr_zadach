@@ -142,6 +142,7 @@
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <Text Include="coeffs.txt" />
     <Text Include="tnet.txt" />
     <Text Include="params.txt" />
     <Text Include="fvalues.txt" />
