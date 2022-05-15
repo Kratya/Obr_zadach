@@ -1,0 +1,32 @@
+iT = 0 time = 3.00000000e+01
+Abandoned elements count: 0
+
+
+iT = 1 time = 6.00000000e+01
+Abandoned elements count: 0
+
+
+iT = 2 time = 9.00000000e+01
+Abandoned elements count: 0
+
+
+iT = 3 time = 1.20000000e+02
+Abandoned elements count: 0
+
+
+iT = 4 time = 1.50000000e+02
+Abandoned elements count: 0
+
+
+iT = 5 time = 1.80000000e+02
+Abandoned elements count: 0
+
+
+iT = 6 time = 2.10000000e+02
+Abandoned elements count: 0
+
+
+iT = 7 time = 2.40000000e+02
+Abandoned elements count: 0
+
+
