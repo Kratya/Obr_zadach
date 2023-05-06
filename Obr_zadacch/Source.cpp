@@ -1,4 +1,5 @@
 #define _USE_MATH_DEFINES
+
 #include <vector>
 #include <fstream>
 #include <iostream>
@@ -17,11 +18,26 @@ using namespace std;
 /// </summary>
 /// <param name="A"> - Матрица для вывода</param>
 /// <param name="fileName"> - Имя файла, куда выводить (Относительное или абсолютное)</param>
-void writeMatrix(vector<vector<double>> A, string fileName)
+void writeMatrix(vector<vector<double>> A, vector<double> gamma_reg, int num_iter, string fileName)
 {
 	ofstream stream;
-	stream.open(fileName);
+	stream.open(fileName, std::ios::app);
 	int n = A.size();
+
+	for (int i = 0; i < n; i++)
+	{
+		stream << "-";
+	}
+	stream << endl;
+	stream << "iter = " << num_iter << "; ";
+
+	stream << "gamma =[";
+	for (int i = 0; i < n; i++)
+	{
+		stream << gamma_reg[i] << ";";
+	}
+	stream << "]" << endl;
+
 	for (int q = 0; q < n; q++)
 	{
 		for (int p = 0; p < n; p++)
@@ -30,6 +46,13 @@ void writeMatrix(vector<vector<double>> A, string fileName)
 		}
 		stream << endl;
 	}
+
+	for (int i = 0; i < n; i++)
+	{
+		stream << "-";
+	}
+	stream << endl;
+
 	stream.close();
 }
 
@@ -136,7 +159,7 @@ public:
 
 	int num_well; // Номер скважины
 	string name;
-	int n_pump; //
+	int n_pump; 
 	string type_name;
 	int n_times;
 	vector<int> last_day;
@@ -257,6 +280,107 @@ int write_well_param(vector<paramWell> ourWells, int num_all_well, string path)
 	return 0;
 }
 
+class paramPhase
+{
+public:
+
+	int num;
+	vector<string> buffstring;
+	vector<double> buffnum;
+	double paramPoly, paramH2O;
+	double prev_paramPoly, prev_paramH2O;
+
+	paramPhase() {};
+	paramPhase(int _num, vector<string> _buffstring, vector<double> _buffnum, double _paramPoly, double _paramH2O)
+	{
+		this->num = _num;
+		this->buffstring = _buffstring;
+		this->buffnum = _buffnum;
+		this->paramPoly = _paramPoly;
+		this->paramH2O = _paramH2O;
+	};
+
+	~paramPhase() {};
+};
+
+int read_phase_param(paramPhase& stfPhase, string path)
+{
+	ifstream in(path + "/phasecomplist.txt");
+	vector<string> buffstring(10);
+	vector<double> buffnum(10);
+	double paramPoly, paramH2O;
+	int num;
+
+	in >> num;
+
+	getline(in, buffstring[0], '\t');
+	getline(in, buffstring[0], '\t');
+	getline(in, buffstring[1], '\t');
+	getline(in, buffstring[2], '\n');
+
+	getline(in, buffstring[3], '\t');
+	in >> buffnum[0];
+	in >> buffnum[1];
+	in >> buffnum[2];
+
+	getline(in, buffstring[4], '\n');
+	getline(in, buffstring[4], '\t');
+	in >> buffnum[3];
+	in >> buffnum[4];
+	in >> buffnum[5];
+
+	getline(in, buffstring[5], '\t');
+	getline(in, buffstring[5], '\t');
+	getline(in, buffstring[6], '\t');
+	getline(in, buffstring[7], '\n');
+
+	getline(in, buffstring[8], '\t');
+	in >> paramH2O;
+	in >> buffnum[6];
+	in >> paramPoly;
+
+	getline(in, buffstring[9], '\n');
+	getline(in, buffstring[9], '\t');
+	in >> buffnum[7];
+	in >> buffnum[8];
+	in >> buffnum[9];
+
+	paramPhase new_param_phase(num, buffstring, buffnum, paramPoly, paramH2O);
+	stfPhase = new_param_phase;
+
+	return 0;
+}
+
+int write_phase_param(paramPhase& stfPhase, string path)
+{
+	ofstream out(path + "/phasecomplist.txt");
+	if (out.is_open())
+	{
+		out << stfPhase.num << '\n';
+		out << '\t' << stfPhase.buffstring[0] << '\t' << stfPhase.buffstring[1] << '\t' << stfPhase.buffstring[2] << '\n';
+		out << stfPhase.buffstring[3] << '\t' << stfPhase.buffnum[0] << '\t' << stfPhase.buffnum[1] << '\t' << stfPhase.buffnum[2] << '\n';
+		out << stfPhase.buffstring[4] << '\t' << stfPhase.buffnum[3] << '\t' << stfPhase.buffnum[4] << '\t' << stfPhase.buffnum[5] << '\n';
+		out << '\t' << stfPhase.buffstring[5] << '\t' << stfPhase.buffstring[6] << '\t' << stfPhase.buffstring[7] << '\n';
+		out << stfPhase.buffstring[8] << '\t'<< std::setprecision(5) << stfPhase.paramH2O << '\t' << stfPhase.buffnum[6] << '\t' << std::setprecision(5) << stfPhase.paramPoly << '\n';
+		out << stfPhase.buffstring[9] << '\t' << stfPhase.buffnum[7] << '\t' << stfPhase.buffnum[8] << '\t' << stfPhase.buffnum[9] << '\n';
+	}
+	else
+		return -1;
+
+	return 0;
+}
+
+int test_phase_rw(paramPhase& stfPhase)
+{
+	int result = 0;
+
+	if (!read_phase_param(stfPhase, "./properties/"))
+		result = write_phase_param(stfPhase, "./");
+	else return -1;
+
+	return result;
+}
+
 class solvn
 {
 public:
@@ -278,13 +402,18 @@ private:
 	int max_iter = 100;
 	double eps_func = 1E-8;
 	double eps_dif = 1E-14;
-	double alpha = 1E-8;
-	double delta = 0.005;
-	double dThetaProc = 0.1;
+
+	double alpha = 1E-7;
+	double alpha_gamma = 1E-15;
+
+	//double delta = 0.005;
+	double delta = 0.05;
+	double dThetaProc = 0.3;
 	double absThetaMax = 100;
 	double vStar = -100;
-	//string name_model;
+	
 	int is_polymer_flag = 0;
+
 
 	// Переменные для отладки
 	int dthetcount = 0;
@@ -293,6 +422,8 @@ private:
 	int d_iter = 0;
 
 	int alphas_flag;
+	int omega_flag = 1; // Должно быть = 0, потом переправить
+
 	vector<double>	vAlphas;
 	vector<int> vFxThetas;
 
@@ -302,6 +433,7 @@ private:
 	vector<int> numTheta;
 
 	vector<paramWell> ourWells;
+	paramPhase ourOmega;
 	vector<vector<double>> fWellsAll, TWellsAll;
 	string pathComlex = "Filtr3D.exe";
 	string pathDatas = "./output";
@@ -381,25 +513,33 @@ private:
 	int opti_task(string path);
 	// Расчет производных, интеграл и функционал
 	double trapez(vector<double> tVal, vector<double> fVal);
-	double deriv(double fVal, double fValNew, double MFThetas);
-	double functional(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff);
-	double functional(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff, 
-					  vector<string> fWOList, vector<string> fPolyList, int iter);
+	double deriv(double fVal, double fValNew, double Old_Theta, double New_Theta);
+	
 	int wdebugfunc(double dfunc, int d_iter);
 	int wdebugtheta(vector<paramWell> fourWells, int d_iter);
-	int wdebugvals(int d_iter);
-	int checkMaxMinTheta(vector<paramWell>& fourWells, vector<double> deltaP);
+	int wdebugvals(vector<double>gamma_reg, int d_iter);
+	int wdedugoutprop(int d_iter);
+	int checkMaxMinTheta(vector<paramWell>& fourWells, vector<double> deltaP, vector<double>& gamma_reg);
 	void prep_deriv_folder();
-	void prep_data_deriv(vector<double>& vecFunc, int i, vector<string> fWOFiles, vector<string> fPolyFiles);
+
+	vector<vector<double>> parts_func(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff);
+	vector<vector<double>> parts_func(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff, 
+					  vector<string> fWOList, vector<string> fPolyList, int iter);
+	void prep_data_deriv(vector<vector<vector<double>>>& vecFunc, vector<double>& new_thetas, int i, vector<string> fWOFiles, vector<string> fPolyFiles);
+	void prep_data_deriv_omega(vector<vector<vector<double>>>& vecFunc, vector<double>& new_thetas, vector<string> fWOFiles, vector<string> fPolyFiles);
+	double functional(vector<vector<double>> parts_result, vector<double> MFCoeff);
+
+	
 
 };
 
 //----------------------------------------
-double solvn::deriv(double fVal, double fValNew, double MFThetas)
+double solvn::deriv(double fVal, double fValNew, double Old_Theta, double New_Theta)
 {
 	double result = 0;
 
-	result = (fValNew - fVal) / abs(MFThetas * delta);
+	//result = (fValNew - fVal) / abs(MFThetas * delta);
+	result = (fValNew - fVal) / abs(New_Theta - Old_Theta);
 
 	return result;
 }
@@ -408,8 +548,6 @@ double solvn::trapez(vector<double> tVal, vector<double> fVal)
 {
 	const int n = fVal.size();
 	double result = 0, x1, x2;
-
-	//cout << "calc trapez:" << endl;
 
 	for (int h = 0; h < n - 1; h++)
 	{
@@ -426,16 +564,124 @@ double solvn::trapez(vector<double> tVal, vector<double> fVal)
 
 }
 
-double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff)
+void solvn::clear_SLAU(vector<vector<double>>& A, vector<double>& b)
+{
+	int new_dim = a_dim;
+	if (omega_flag)
+	{
+		new_dim += 1;
+	}
+
+	for (int q = 0; q < new_dim; q++)
+	{
+		for (int p = 0; p < new_dim; p++)
+		{
+			A[q][p] = 0;
+		}
+		b[q] = 0;
+	}
+
+}
+
+int solvn::gauss_plus(vector<vector<double>>& A, vector<double>& b, vector<double>& x, int N)
+{
+	int c, err = 0, sum = 0;
+	for (int i = 0; i < N; i++)
+	{
+		if (A[i][i] == 0)
+		{
+			c = 1;
+			while ((i + c) < N && A[i + c][i] == 0)
+				c++;
+			if ((i + c) == N)
+			{
+				err = 1;
+				break;
+			}
+			for (int j = i, k = 0; k < N; k++)
+			{
+				swap(A[j][k], A[j + c][k]);
+			}
+			swap(b[i], b[i + c]);
+		}
+
+		for (int j = 0; j < N; j++) {
+
+			if (i != j) {
+				float pro = A[j][i] / A[i][i];
+
+				for (int k = 0; k < N; k++)
+					A[j][k] = A[j][k] - (A[i][k]) * pro;
+				b[j] = b[j] - (b[i]) * pro;
+			}
+		}
+	}
+
+	if (err == 1)
+	{
+		err = 3;
+		int tj = 0;
+
+		for (int i = 0; i < N; i++)
+		{
+			sum = 0;
+			for (tj = 0; tj < N; tj++)
+				sum = sum + A[i][tj];
+			if (tj < N)
+				if (sum == A[i][tj])
+					err = 2;
+		}
+	}
+
+	if (err == 2)
+	{
+		cout << "Infinite Solutions Exists" << endl;
+		return 2;
+	}
+	else if (err == 3)
+	{
+		cout << "No Solution Exists" << endl;
+		return 3;
+	}
+	else {
+		for (int i = 0; i < N; i++)
+			x[i] = b[i] / A[i][i];
+	}
+
+	return 0;
+}
+
+void solvn::checkGauss()
+{
+	vector<vector<double>> A = { {0, 2, 1},
+								 {1, 1, 2},
+								  {2, 1, 1} };
+	vector<double> b = { 4, 6, 7 };
+	vector<double> x = { 0, 0, 0 };
+
+	gauss_plus(A, b, x, 3);
+
+	for (int i = 0; i < 3; i++)
+		cout << "x[" << i << "] = " << x[i] << endl;
+}
+
+double solvn::Get_norm(vector<double>& point1)
+{
+	double r = 0;
+
+	for (int i = 0; i < point1.size(); i++)
+	{
+		r += point1[i] * point1[i];
+	}
+	r = sqrt(r);
+	return r;
+}
+
+vector<vector<double>> solvn::parts_func(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff)
 {
 	int log = 0;
-	double result = 0;
-	vector<double> part_res;
-	//cout << "start calc functional" << endl;
-	//for (int i = 0; i < 3 * nWells; i++)
-	//{
-	//	cout << "Coeff[" << i << "] = " << MFCoeff[i] << endl;
-	//}
+	vector<double> parts_f;
+	vector<vector<double>> parts_result;
 
 	for (int i = 0; i < nWells; i++)
 	{
@@ -462,10 +708,16 @@ double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<doubl
 	}
 
 
-	part_res.resize(num_values);
+	parts_f.resize(num_values);
+	parts_result.resize(nWells);
+	for (int i = 0; i < nWells; i++)
+	{
+		parts_result[i].resize(4);
+	}
+
 	for (int i = 0; i < num_values; i++)
 	{
-		part_res[i] = trapez(TWellsAll[i], ValWellsAll[i]);
+		parts_f[i] = trapez(TWellsAll[i], ValWellsAll[i]);
 	}
 
 	// Подбор альф
@@ -476,34 +728,50 @@ double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<doubl
 		alphas_flag = 0;
 	}
 
-	for (int i = 0; i < num_values; i++)
+	for (int i = 0; i < nWells; i++)
 	{
-		result += pow(MFCoeff[i] * part_res[i], 2);
+		if (parts_f[i * 2] > 0)
+			parts_result[i][2] = parts_f[i * 2];
+		else
+			parts_result[i][0] = parts_f[i * 2];
+
+		parts_result[i][3] = parts_f[i * 2 + 1];
 	}
-	cout << "functional result = " << result << endl;
+	if (is_polymer_flag)
+	{
+		for (int i = 0; i < nWells; i++)
+		{
+			parts_result[i][1] = parts_f[2 * nWells + i];
+		}
+	}
+	else
+	{
+		for (int i = 0; i < nWells; i++)
+		{
+			parts_result[i][1] = 0;
+		}
+	}
 
-	// debug thetas ------------------------------>
-	//makeDir("./NewDebug/debug_i" + to_string(d_iter));
-	//ofstream dfunc("./NewDebug/debug_i" + to_string(d_iter) + "/" + "dfunc_i" + to_string(d_iter) + "_n" + to_string(dfunccount) + ".txt");
-	//dfunc << result << endl;
-	//dfunccount++;	
-	//dfunc.close();
-	// <-------------------------------------------
-
-	return result;
+	return parts_result;
 }
 
-double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff,
+int solvn::wdedugoutprop(int d_iter)
+{
+	makeDir("./debug_outprop/");
+	makeDir("./debug_outprop/debug_iter_" + std::to_string(d_iter));
+
+	std::filesystem::copy("./output", "./debug_outprop/debug_iter_" + std::to_string(d_iter) + "/output", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./properties", "./debug_outprop/debug_iter_" + std::to_string(d_iter) + "properties", std::filesystem::copy_options::recursive);
+
+	return 0;
+}
+
+vector<vector<double>> solvn::parts_func(vector<vector<double>> ValWellsAll, vector<vector<double>> TWellsAll, vector<double>& MFCoeff,
 						 vector<string> fWOList, vector<string> fPolyList, int iter)
 {
 	int log = 0;
-	double result = 0;
-	vector<double> part_res;
-	//cout << "start calc functional" << endl;
-	//for (int i = 0; i < 3 * nWells; i++)
-	//{
-	//	cout << "Coeff[" << i << "] = " << MFCoeff[i] << endl;
-	//}
+	vector<double> parts_f;
+	vector<vector<double>> parts_result;
 	
 	for (int i = 0; i < nWells; i++) 
 	{
@@ -529,10 +797,40 @@ double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<doubl
 		num_values = 2 * nWells;
 	}
 
-	part_res.resize(num_values);
+	parts_f.resize(num_values);
+	parts_result.resize(nWells);
+	for (int i = 0; i < nWells; i++)
+	{
+		parts_result[i].resize(4);
+	}
+
 	for (int i = 0; i < num_values; i++)
 	{
-		part_res[i] = trapez(TWellsAll[i], ValWellsAll[i]);
+		parts_f[i] = trapez(TWellsAll[i], ValWellsAll[i]);
+	}
+
+	for (int i = 0; i < nWells; i++)
+	{
+		if (parts_f[i * 2] > 0)
+			parts_result[i][2] = parts_f[i * 2];
+		else
+			parts_result[i][0] = parts_f[i * 2];
+
+		parts_result[i][3] = parts_f[i * 2 + 1];
+	}
+	if (is_polymer_flag)
+	{
+		for (int i = 0; i < nWells; i++)
+		{
+			parts_result[i][1] = parts_f[2 * nWells + i];
+		}
+	}
+	else
+	{
+		for (int i = 0; i < nWells; i++)
+		{
+			parts_result[i][1] = 0;
+		}
 	}
 
 	// Подбор альф
@@ -549,16 +847,26 @@ double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<doubl
 	double integr_res = 0;
 	for (int i = 0; i < nWells; i++)
 	{
-		integr_res += pow(MFCoeff[2 * i] * part_res[2 * i], 2);
+		integr_res += pow(MFCoeff[0] * parts_result[i][0], 2);
 	}
-	out.open("./debug_data/integr_s1.txt", std::ios::app);
+
+	out.open("./debug_data/integr_s1_out.txt", std::ios::app);
 	out << iter << ". " << integr_res << endl;
 	out.close();
 	integr_res = 0;
 
 	for (int i = 0; i < nWells; i++)
 	{
-		integr_res += pow(MFCoeff[2 * i + 1] * part_res[2 * i + 1], 2);
+		integr_res += pow(MFCoeff[2] * parts_result[i][2], 2);
+	}
+	out.open("./debug_data/integr_s1_ext.txt", std::ios::app);
+	out << iter << ". " << integr_res << endl;
+	out.close();
+	integr_res = 0;
+
+	for (int i = 0; i < nWells; i++)
+	{
+		integr_res += pow(MFCoeff[1] * parts_result[i][1], 2);
 	}
 	out.open("./debug_data/integr_s2.txt", std::ios::app);
 	out << iter << ". " << integr_res << endl;
@@ -569,47 +877,37 @@ double solvn::functional(vector<vector<double>> ValWellsAll, vector<vector<doubl
 		int j = 2 * nWells;
 		for (int i = 0; i < nWells; i++)
 		{
-			integr_res += pow(MFCoeff[i + j] * part_res[i + j], 2);
+			integr_res += pow(MFCoeff[3] * parts_result[i][3], 2);
 		}
 		out.open("./debug_data/integr_c3.txt", std::ios::app);
 		out << iter << ". " << integr_res << endl;
 		out.close();
 		integr_res = 0;
 	}
-	
-	for (int i = 0; i < 2 * nWells; i++)
+
+	if (omega_flag)
 	{
-		out.open("./debug_data/integr_" + fWOList[i], std::ios::app);
-		out << iter << ". " << pow(MFCoeff[i] * part_res[i], 2) << endl;
+		out.open("./debug_data/omega.txt", std::ios::app);
+		out << iter << ". " << "P = " << ourOmega.paramPoly << ", H2O = " << ourOmega.paramH2O << endl;
 		out.close();
 	}
+	
+	return parts_result;
+}
 
-	if (is_polymer_flag) {
-		int j = 2 * nWells;
-		for (int i = j; i < j + nWells; i++)
+double solvn::functional(vector<vector<double>> parts_result, vector<double> MFCoeff)
+{
+	double func = 0;
+
+	for (int i = 0; i < nWells; i++)
+	{
+		for (int j = 0; j < 4; j++)
 		{
-			out.open("./debug_data/integr_" + fPolyList[i - j], std::ios::app);
-			out << iter << ". " << pow(MFCoeff[i] * part_res[i], 2) << endl;
-			out.close();
+			func += pow(MFCoeff[j] * parts_result[i][j], 2);
 		}
 	}
-	
 
-	for (int i = 0; i < num_values; i++)
-	{
-		result += pow(MFCoeff[i] * part_res[i], 2);
-	}
-	cout << "functional result = " << result << endl;
-
-	// debug thetas ------------------------------>
-	//makeDir("./NewDebug/debug_i" + to_string(d_iter));
-	//ofstream dfunc("./NewDebug/debug_i" + to_string(d_iter) + "/" + "dfunc_i" + to_string(d_iter) + "_n" + to_string(dfunccount) + ".txt");
-	//dfunc << result << endl;
-	//dfunccount++;	
-	//dfunc.close();
-	// <-------------------------------------------
-
-	return result;
+	return func;
 }
 
 void solvn::prep_deriv_folder()
@@ -618,7 +916,6 @@ void solvn::prep_deriv_folder()
 	for (int i = 0; i < a_dim; i++)
 	{
 		makeDir("./debug_data/deriv" + to_string(i) + "/");
-		//std::filesystem::copy("./", "./debug_data/deriv" + to_string(i), std::filesystem::copy_options::recursive); // "./fcopyf/" ???
 		std::filesystem::copy("./graph", "./debug_data/deriv" + to_string(i) + "/graph", std::filesystem::copy_options::recursive);
 		std::filesystem::copy("./mesh", "./debug_data/deriv" + to_string(i) + "/mesh", std::filesystem::copy_options::recursive);
 		std::filesystem::copy("./output_balance_Q", "./debug_data/deriv" + to_string(i) + "/output_balance_Q", std::filesystem::copy_options::recursive);
@@ -638,14 +935,35 @@ void solvn::prep_deriv_folder()
 		std::filesystem::copy("./mkl_core.dll", "./debug_data/deriv" + to_string(i));
 		std::filesystem::copy("./mkl_def.dll", "./debug_data/deriv" + to_string(i));
 		std::filesystem::copy("./mkl_intel_thread.dll", "./debug_data/deriv" + to_string(i));
-		//std::filesystem::copy("./Pressure Change.txt", "./debug_data/deriv" + to_string(i));
 		std::filesystem::copy("./time_points.txt", "./debug_data/deriv" + to_string(i));
-		//std::filesystem::copy("./" + name_model, "./debug_data/deriv" + to_string(i)); // ????
-		//std::filesystem::copy("./output", "./debug_data/deriv" + to_string(i) + "/output", std::filesystem::copy_options::recursive);// ????
 	}
+
+	// ============================================Для омеги:==========================================================================
+	makeDir("./debug_data/deriv_omega/");
+	std::filesystem::copy("./graph", "./debug_data/deriv_omega/graph", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./mesh", "./debug_data/deriv_omega/mesh", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./output_balance_Q", "./debug_data/deriv_omega/output_balance_Q", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./output3D", "./debug_data/deriv_omega/output3D", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./properties", "./debug_data/deriv_omega/properties", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./tables", "./debug_data/deriv_omega/tables", std::filesystem::copy_options::recursive);
+	std::filesystem::copy("./alignment.txt", "./debug_data/deriv_omega");
+	std::filesystem::copy("./concrt140.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./DllInitAndDrawText.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./FilesConfig.cfg", "./debug_data/deriv_omega");
+	std::filesystem::copy("./filtr.cfg", "./debug_data/deriv_omega");
+	std::filesystem::copy("./filtr.log", "./debug_data/deriv_omega");
+	std::filesystem::copy("./Filtr3D.exe", "./debug_data/deriv_omega");
+	std::filesystem::copy("./libiomp5md.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./lines.txt", "./debug_data/deriv_omega");
+	std::filesystem::copy("./mkl_avx.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./mkl_core.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./mkl_def.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./mkl_intel_thread.dll", "./debug_data/deriv_omega");
+	std::filesystem::copy("./time_points.txt", "./debug_data/deriv_omega");
+	//=============================================================================================================================================
 }
 
-void solvn::prep_data_deriv(vector<double>& vecFunc, int i, vector<string> fWOFiles, vector<string> fPolyFiles)
+void solvn::prep_data_deriv(vector<vector<vector<double>>>& vecFunc, vector<double>& new_thetas, int i, vector<string> fWOFiles, vector<string> fPolyFiles)
 {
 	vector<vector<double>> fWellsAllNew, TWellsAllNew;
 	vector<paramWell> plDeltaWells = ourWells;
@@ -666,8 +984,6 @@ void solvn::prep_data_deriv(vector<double>& vecFunc, int i, vector<string> fWOFi
 
 	fWellsAllNew.resize(num_values);
 	TWellsAllNew.resize(num_values);
-	//for (int i = 0; i < a_dim; i++)
-	//{ 
 
 	tTheta = plDeltaWells[numWell[i]].theta[numTheta[i]];
 	plDeltaWells[numWell[i]].theta[numTheta[i]] = plDeltaWells[numWell[i]].theta[numTheta[i]] +
@@ -675,24 +991,63 @@ void solvn::prep_data_deriv(vector<double>& vecFunc, int i, vector<string> fWOFi
 	cout << "write1 deriv well params" << endl;
 	write_well_param(plDeltaWells, nWells, "./debug_data/deriv" + to_string(i) + "/properties/");
 	cout << "launch deriv filtr3d" << endl;
-	//system(("\\debug_data\\deriv" + to_string(i) + "\\" + pathComlex).c_str());
-	//-------------------------------------------------------------------------------------------------------------------------
-	// ("\\debug_data\\deriv" + to_string(i) + "\\" + pathComlex).c_str()
-	//string tpath = "\\debug_data\\deriv" + to_string(i) + "\\" + pathComlex;
-	//std::wstring stemp = std::wstring(tpath.begin(), tpath.end());
-	//system(("c: && cd C:/Users/krave/OneDrive/Рабочий стол/МОЙ ДИПЛОМ/ИССЛЕДОВАНИЯ/тест с полимером и другой нефтенасыщ/debug_data/deriv" + to_string(i) + "/ &&" + pathComlex).c_str());
 	system(("c: && cd " + cwd.string() + "\\debug_data\\deriv" + to_string(i) + " \\ && " + pathComlex).c_str());
-	//ShellExecute(NULL, L"open", stemp.c_str(), NULL, NULL, SW_SHOWDEFAULT);
-	//-------------------------------------------------------------------------------------------------------------------------
 
 	cout << "read_all_vals deriv" << endl;
 	read_all_vals(fWellsAllNew, TWellsAllNew, "./debug_data/deriv" + to_string(i) + "/output", fWOFiles, fPolyFiles);
-	vecFunc[i] = functional(fWellsAllNew, TWellsAllNew, vAlphas);
+	vecFunc[i] = parts_func(fWellsAllNew, TWellsAllNew, vAlphas);
+	new_thetas[i] = plDeltaWells[numWell[i]].theta[numTheta[i]];
 
 	plDeltaWells[numWell[i]].theta[numTheta[i]] = tTheta;
 	cout << "write2 deriv well params" << endl;
 	write_well_param(plDeltaWells, nWells, "./debug_data/deriv" + to_string(i) + "/properties/");
-	//}
+}
+
+void solvn::prep_data_deriv_omega(vector<vector<vector<double>>>& vecFunc, vector<double>& new_thetas, vector<string> fWOFiles, vector<string> fPolyFiles)
+{
+	vector<vector<double>> fWellsAllNew, TWellsAllNew;
+	paramPhase tOmega;
+
+	std::filesystem::path cwd = std::filesystem::current_path();
+	cout << cwd.string() << endl;
+
+	int num_values;
+	if (is_polymer_flag)
+	{
+		num_values = 3 * nWells;
+	}
+	else
+	{
+		num_values = 2 * nWells;
+	}
+
+	fWellsAllNew.resize(num_values);
+	TWellsAllNew.resize(num_values);
+
+	tOmega = ourOmega;
+
+	tOmega.paramPoly += tOmega.paramPoly * delta;
+	tOmega.paramH2O = 1 - tOmega.paramPoly;
+	
+	cout << "write1 deriv omega params" << endl;
+	write_phase_param(tOmega, "./debug_data/deriv_omega/properties/");
+	cout << "launch deriv filtr3d" << endl;
+	system(("c: && cd " + cwd.string() + "\\debug_data\\deriv_omega" + " \\ && " + pathComlex).c_str());
+
+	cout << "read_all_vals deriv" << endl;
+	read_all_vals(fWellsAllNew, TWellsAllNew, "./debug_data/deriv_omega/output", fWOFiles, fPolyFiles);
+	vecFunc[a_dim] = parts_func(fWellsAllNew, TWellsAllNew, vAlphas);
+	new_thetas[a_dim] = tOmega.paramPoly;
+
+	cout << "write2 deriv well params" << endl;
+	write_phase_param(ourOmega, "./debug_data/deriv_omega/properties/");
+	
+	// debug this
+	//ofstream dout;
+	//dout.open("./debug_data/deriv_omega/debug_deriv_omega.txt", std::ios::app);
+	//dout << ourOmega.paramPoly << "; " << tOmega.paramPoly << endl;
+	//dout.close();
+	// end debug
 }
 
 int solvn::wdebugfunc(double dfunc, int d_iter)
@@ -724,28 +1079,15 @@ int solvn::wdebugtheta(vector<paramWell> fourWells, int d_iter)
 	return 0;
 }
 
-int solvn::wdebugvals(int d_iter)
+int solvn::wdebugvals(vector<double> gamma_reg,int d_iter)
 {
 	makeDir("./debug_data/");
 	ofstream deb_vals; //f_vals;
 	ifstream f_vals;
-	deb_vals.open("./debug_data/debug_vals.txt", std::ios::app);
-	/*if (d_iter == 0)
-	{
-		deb_vals << "iter: ";
-		for (int i = 0; i < nWells; i++)
-		{
-			deb_vals << ourWells[i].name + "_s1 ";
-			deb_vals << ourWells[i].name + "_s2 ";
-		}
 
-		for (int i = 0; i < nWells; i++)
-		{
-			deb_vals << ourWells[i].name + "_c3 ";
-		}
-		deb_vals << "\n";
-	}*/
+	deb_vals.open("./debug_data/debug_vals.txt", std::ios::app);
 	f_vals.open("./output/Well1_s2.txt");
+
 	deb_vals << d_iter << ": ";
 	double TVal, FVal;
 
@@ -755,6 +1097,16 @@ int solvn::wdebugvals(int d_iter)
 
 	f_vals.close();
 	deb_vals.close();
+
+	deb_vals.open("./debug_data/debug_alpas.txt", std::ios::app);
+	deb_vals <<  "iter =" << d_iter << ":";
+	for (int i = 0; i < gamma_reg.size(); i++)
+	{
+		deb_vals << gamma_reg[i] << ";";
+	}
+	deb_vals << endl;
+	deb_vals.close();
+
 	return 0;
 }
 
@@ -770,8 +1122,8 @@ int solvn::fLineParams(string path)
 		in >> eps_dif; // Минимальоне значение нормы вектора b
 		in >> delta;
 		in >> vStar;
-		//in >> name_model;
 		in >> is_polymer_flag;
+		in >> omega_flag;
 
 		in.close();
 
@@ -788,7 +1140,14 @@ int solvn::fChkFxThetas(string path)
 {
 	ifstream in;
 	int flag = 0;
-	vFxThetas.resize(a_dim);
+	if (omega_flag) 
+	{
+		vFxThetas.resize(a_dim + 1);
+	}
+	else 
+	{
+		vFxThetas.resize(a_dim);
+	}
 
 	for (int i = 0; i < a_dim; i++)
 		vFxThetas[i] = 0;
@@ -855,17 +1214,6 @@ int solvn::fLineVals(vector<double>& MFval_true, vector<double>& MTval, string p
 		cout << "err read vals" << endl;
 		return 1;
 	}
-	// debug info --->
-	//makeDir("./NewDebug/debug_i" + to_string(d_iter));
-	//ofstream dvals("./NewDebug/debug_i" + to_string(d_iter) + "/" + tFile + "_i" + to_string(d_iter) + "_n" + to_string(dvalscount) + ".txt");
-	//int numvals = MFval_true.size();
-	//for (int i = 0; i < numvals; i++)
-	//{
-	//	dvals << MTval[i] << " : " << MFval_true[i] << "\n";
-	//}
-	//dvalscount++;
-	//dvals.close();
-	// <--------------
 
 	return 0;
 }
@@ -978,7 +1326,7 @@ int solvn::load_data(vector<vector<double>>& MFVal, vector<vector<double>>& MTva
 		dp += ourWells[i].n_times - 1;
 	}
 
-	vAlphas.resize(num_values);
+	vAlphas.resize(4);
 	ifstream in;
 	in.open("alphas.txt", ios_base::in);
 	if (in.is_open())
@@ -987,11 +1335,11 @@ int solvn::load_data(vector<vector<double>>& MFVal, vector<vector<double>>& MTva
 		switch (alphas_flag)
 		{
 		case 0:
-			for (int i = 0; i < num_values; i++)
+			for (int i = 0; i < 4; i++)
 				vAlphas[i] = 1;
 			break;
 		case 1:
-			for (int i = 0; i < num_values; i++)
+			for (int i = 0; i < 4; i++)
 				in >> vAlphas[i];
 			break;
 		default:
@@ -1003,14 +1351,6 @@ int solvn::load_data(vector<vector<double>>& MFVal, vector<vector<double>>& MTva
 		cout << "err open alphas.txt" << endl;
 		system("pause");
 	}
-		
-
-	
-	//for (int i = 0; i < 3 * nWells; i++)
-	//	vAlphas[i] = 0;
-	//vAlphas[6] = 1;
-	//vAlphas[7] = 1;
-	//vAlphas[8] = 1;
 
 	return 0;
 }
@@ -1026,112 +1366,197 @@ int solvn::opti_task(string path)
 	genFList(tWOFiles, tPolyFiles);
 	prep_deriv_folder();
 
-	vector<vector<double>> A(a_dim, vector<double>(a_dim));
-	vector<double> b(a_dim);
-	vector<double> dP(a_dim); // - diff of Parameters - Синоним для повышения читабельности кода и экономии памяти
 	vector<thread> func_tread; // Массив потоков
 
-	cout << "Launch optimization task(...)" << endl;
+	vector<vector<vector<double>>> vecFuncW;
+	vector<vector<double>> vec_func;
+	vector<double> gamma_reg;
+	vector<double> new_thetas;
 
-	double func = 1E+30, prev_func, funcWdelta, dif = 1E+30, alpha_loc;
-	vector<double> vecFuncW;
+	double func = 1E+30, prev_func, funcWdelta, dif = 1E+30;
+	int res_check_th = 10, iters_of_check = 0;
+	
+	int new_dim = 0;
+	if (omega_flag)
+	{
+		new_dim = a_dim + 1;
+	}
+	else
+	{
+		new_dim = a_dim;
+	}
+
+	vector<vector<double>> A(new_dim, vector<double>(new_dim));
+	vector<double> b(new_dim);
+	vector<double> dP(new_dim); // - diff of Parameters
+
+	gamma_reg.resize(new_dim);
+	new_thetas.resize(new_dim);
+
+	for(int i = 0; i < a_dim; i++)
+	{
+		gamma_reg[i] = alpha;
+	}
+	if(omega_flag)
+		gamma_reg[a_dim] = alpha_gamma;
+	
 	int iter_a;
 	if(true)
 	{
-		func = functional(fWellsAll, TWellsAll, vAlphas, tWOFiles, tPolyFiles, d_iter);
+		vec_func = parts_func(fWellsAll, TWellsAll, vAlphas, tWOFiles, tPolyFiles, d_iter);
+		func = functional(vec_func, vAlphas);
+
 		wdebugfunc(func, d_iter);
-		wdebugvals(d_iter);
+		wdebugvals(gamma_reg, d_iter);
 
 		cout << "func = " << func << endl;
 		
 		prev_func = func;
 
-		vecFuncW.resize(a_dim);
+		vecFuncW.resize(new_dim);
 
 		cout << "max_iter = " << max_iter << " func = " << func << " dif = " << dif << endl;
 		for (int iter = 1; iter < max_iter && func > eps_func && dif > eps_dif; iter++)
 		{
 			iter_a = 0;
-			alpha_loc = alpha;
-			//do
-			//{
-				// очистить СЛАУ
+			//alpha_loc = alpha;
+			
+
+			// очистить СЛАУ
 			clear_SLAU(A, b);
 			// собрать СЛАУ 
 			// Расчет всех f(p[i] + dp[i])
-			// 
-			// debug func for threads
-			//for (int i = 0; i < a_dim; i++)
-			//	prep_data_deriv(vecFuncW, i, tWOFiles, tPolyFiles);
 			
 			// run threads
-			//for (int i = 0; i < a_dim; i++)
-			//	func_tread.push_back(thread(&solvn::prep_data_deriv, this, std::ref(vecFuncW), i, tWOFiles, tPolyFiles));
-			//for (int i = 0; i < a_dim; i++)
-			//	func_tread[i].join();
-
 			int ia = a_dim % 4;
 			int ib = 0;
 			for (ib = 0; ib < a_dim - ia;)
 			{
 				for (int i = 0; i < 4; i++)
-					func_tread.push_back(thread(&solvn::prep_data_deriv, this, std::ref(vecFuncW), ib + i, tWOFiles, tPolyFiles));
+					func_tread.push_back(thread(&solvn::prep_data_deriv, this, std::ref(vecFuncW), std::ref(new_thetas), ib + i, tWOFiles, tPolyFiles));
 				for (int i = 0; i < 4; i++)
 					func_tread[ib + i].join();
 				ib += 4;
 			}
 
 			for(int i = 0; i < ia; i++)
-				func_tread.push_back(thread(&solvn::prep_data_deriv, this, std::ref(vecFuncW), ib + i, tWOFiles, tPolyFiles));
+				func_tread.push_back(thread(&solvn::prep_data_deriv, this, std::ref(vecFuncW), std::ref(new_thetas), ib + i, tWOFiles, tPolyFiles));
 			for (int i = 0; i < ia; i++)
 				func_tread[ib + i].join();
 
-			for (int q = 0; q < a_dim; q++)
+			//___________________Можно инт. в потоки---------------------------:
+			if (omega_flag)
 			{
-				for (int p = 0; p < a_dim; p++)
+				prep_data_deriv_omega(vecFuncW, new_thetas, tWOFiles, tPolyFiles);
+			}
+			//-----------------------------------------------------------------
+			
+			while(res_check_th != 0 || iters_of_check < 20)
+			{
+				iters_of_check++;
+
+				for (int q = 0; q < a_dim; q++)
 				{
-					A[q][p] += deriv(func, vecFuncW[q], ourWells[numWell[q]].theta[numTheta[q]]) *
-								deriv(func, vecFuncW[p], ourWells[numWell[p]].theta[numTheta[p]]);
+					for (int p = 0; p < a_dim; p++)
+					{
+						for (int k = 0; k < 4; k++)
+						{
+							for (int w = 0; w < nWells; w++)
+							{
+								A[q][p] += vAlphas[k] * deriv(vec_func[w][k], vecFuncW[q][w][k], ourWells[numWell[q]].theta[numTheta[q]], new_thetas[q]) *
+									deriv(vec_func[w][k], vecFuncW[q][w][k], ourWells[numWell[p]].theta[numTheta[p]], new_thetas[p]);
+							}
+						}
+					}
+					for (int k = 0; k < 4; k++)
+					{
+						for (int w = 0; w < nWells; w++)
+						{
+							b[q] -= vAlphas[k] * deriv(vec_func[w][k], vecFuncW[q][w][k], ourWells[numWell[q]].theta[numTheta[q]], new_thetas[q]) * (vec_func[w][k] - 0);
+						}
+					}
 				}
 
-				b[q] -= deriv(func, vecFuncW[q], ourWells[numWell[q]].theta[numTheta[q]]) * (func - 0);
+				if (omega_flag)
+				{
+					for (int q = 0; q < a_dim; q++)
+					{
+						for (int k = 0; k < 4; k++) 
+						{
+							for (int w = 0; w < nWells; w++)
+							{
+								A[q][a_dim] += vAlphas[k] * deriv(vec_func[w][k], vecFuncW[q][w][k], ourWells[numWell[q]].theta[numTheta[q]], new_thetas[q]) *
+									deriv(vec_func[w][k], vecFuncW[q][w][k], ourOmega.paramPoly, new_thetas[a_dim]);
+							}
+						}
+						A[a_dim][q] = A[q][a_dim];
+					}
+
+					for (int k = 0; k < 4; k++)
+					{
+						for (int w = 0; w < nWells; w++)
+						{
+							b[a_dim] -= vAlphas[k] * deriv(vec_func[w][k], vecFuncW[a_dim][w][k], ourOmega.paramPoly, new_thetas[a_dim]) * (vec_func[w][k] - 0);
+							
+						}
+					}
+
+					for (int k = 0; k < 4; k++)
+					{
+						for (int w = 0; w < nWells; w++)
+						{
+							A[a_dim][a_dim] += vAlphas[k] * deriv(vec_func[w][k], vecFuncW[a_dim][w][k], ourOmega.paramPoly, new_thetas[a_dim]) *
+								deriv(vec_func[w][k], vecFuncW[a_dim][w][k], ourOmega.paramPoly, new_thetas[a_dim]);
+						}
+					}
+				}
+				
+				// Добавляем регуляризацию
+				for (int i = 0; i < new_dim; i++)
+					A[i][i] += gamma_reg[i] * A[i][i];
+
+				cout << "----------A[q][p]-----------" << endl;
+				writeMatrix(A);
+				writeMatrix(A, gamma_reg, d_iter, "./debug_data/deriv_omega/matrix_A.txt");
+				cout << "----------------------------" << endl;
+				cout << endl;
+
+				cout << "------------b[q]------------" << endl;
+				writeVector(b);
+				cout << "----------------------------" << endl;
+				cout << endl;
+
+				// решить СЛАУ
+				gauss_plus(A, b, dP, new_dim);
+
+				cout << "------------dP[q]------------" << endl;
+				writeVector(dP);
+				cout << "----------------------------" << endl;
+				cout << endl;
+				cout << endl;
+
+				dif = Get_norm(dP);
 
 				for(int i = 0; i < a_dim; i++)
-					b[i] += alpha_loc * (ourWells[numWell[q]].prev_theta[numTheta[q]] - 
-										ourWells[numWell[q]].theta[numTheta[q]]); // Или "-"
+					ourWells[numWell[i]].prev_theta[numTheta[i]] = ourWells[numWell[i]].theta[numTheta[i]];
+				if (omega_flag)
+				{
+					ourOmega.prev_paramPoly = ourOmega.paramPoly;
+					ourOmega.prev_paramH2O = ourOmega.paramH2O;
+				}
+
+				res_check_th = checkMaxMinTheta(ourWells, dP, gamma_reg);
 			}
-
-			// Добавляем регуляризацию
-			for (int i = 0; i < a_dim; i++)
-				A[i][i] += alpha_loc;
-
-			cout << "----------A[q][p]-----------" << endl;
-			writeMatrix(A);
-			cout << "----------------------------" << endl;
-			cout << endl;
-
-			cout << "------------b[q]------------" << endl;
-			writeVector(b);
-			cout << "----------------------------" << endl;
-			cout << endl;
-
-			// решить СЛАУ
-			gauss_plus(A, b, dP, a_dim);
-
-			cout << "------------dP[q]------------" << endl;
-			writeVector(dP);
-			cout << "----------------------------" << endl;
-			cout << endl;
-			cout << endl;
-
-			dif = Get_norm(dP);
-
-			for(int i = 0; i < a_dim; i++)
-				ourWells[numWell[i]].prev_theta[numTheta[i]] = ourWells[numWell[i]].theta[numTheta[i]];
-
-			checkMaxMinTheta(ourWells, dP);
+			if(iters_of_check >= 20)
+				cout << "!!! --- iters_of_check >= 20 --- !!!" << endl;
+				//cout << "!!! --- iters_of_check >= 6 --- !!!" << endl;
+			else
+				cout << "iters_of_check = " << iters_of_check << endl; 
+			iters_of_check = 0;
 
 			write_well_param(ourWells, nWells, "./properties/");
+			write_phase_param(ourOmega, "./properties/");
+
 			wdebugtheta(ourWells, d_iter + 1);
 
 			system((pathComlex).c_str());
@@ -1149,7 +1574,8 @@ int solvn::opti_task(string path)
 			prev_func = func;
 
 			read_all_vals(fWellsAll, TWellsAll, pathDatas, tWOFiles, tPolyFiles);
-			func = functional(fWellsAll, TWellsAll, vAlphas, tWOFiles, tPolyFiles, d_iter);
+			vec_func = parts_func(fWellsAll, TWellsAll, vAlphas, tWOFiles, tPolyFiles, d_iter);
+			func = functional(vec_func, vAlphas);
 
 			sum_data_f.open("./debug_data/sum_val.txt", std::ios::app);
 			if(sum_data_f.is_open())
@@ -1178,7 +1604,7 @@ int solvn::opti_task(string path)
 			sum_data_f.close();
 
 			iter_a++;
-			alpha_loc *= 10;
+			//alpha_loc *= 10;
 
 			//debug info ------------------------------>
 			dthetcount = 0;
@@ -1189,161 +1615,125 @@ int solvn::opti_task(string path)
 			func_tread.clear(); // clear vector threads
 
 			wdebugfunc(func, d_iter);
-			wdebugvals(d_iter);
+			wdebugvals(gamma_reg, d_iter);
+			wdedugoutprop(d_iter);
+
+			for (int i = 0; i < a_dim; i++)
+			{
+				gamma_reg[i] = alpha;
+			}
+			if (omega_flag)
+				gamma_reg[a_dim] = alpha_gamma;
 		}
 	}
 	else
 		cout << "nWells != MFvec.size()\n";
 	return 0;
 }
-//------------------------------------------
 
-
-void solvn::clear_SLAU(vector<vector<double>>& A, vector<double>& b)
+int solvn::checkMaxMinTheta(vector<paramWell>& fourWells, vector<double> deltaP, vector<double>& gamma_reg)
 {
-	for (int q = 0; q < a_dim; q++)
-	{
-		for (int p = 0; p < a_dim; p++)
-		{
-			A[q][p] = 0;
-		}
-		b[q] = 0;
-	}
+	double max_theta, min_theta;
+	double error_code = 0;
 
-}
-
-int solvn::gauss_plus(vector<vector<double>>& A, vector<double>& b, vector<double>& x, int N)
-{
-	int c, err = 0, sum = 0;
-	for (int i = 0; i < N; i++)
-	{
-		if (A[i][i] == 0)
-		{
-			c = 1;
-			while ((i + c) < N && A[i + c][i] == 0)
-				c++;
-			if ((i + c) == N)
-			{
-				err = 1;
-				break;
-			}
-			for (int j = i, k = 0; k < N; k++)
-			{
-				swap(A[j][k], A[j + c][k]);
-			}
-			swap(b[i], b[i + c]);
-		}
-
-		for (int j = 0; j < N; j++) {
-
-			if (i != j) {
-				float pro = A[j][i] / A[i][i];
-
-				for (int k = 0; k < N; k++)
-					A[j][k] = A[j][k] - (A[i][k]) * pro;
-				b[j] = b[j] - (b[i]) * pro;
-			}
-		}
-	}
-
-	if (err == 1)
-	{
-		err = 3;
-		int tj = 0;
-
-		for (int i = 0; i < N; i++)
-		{
-			sum = 0;
-			for (tj = 0; tj < N; tj++)
-				sum = sum + A[i][tj];
-			if(tj < N)
-				if (sum == A[i][tj])
-					err = 2;
-		}
-	}
-
-	if (err == 2)
-	{
-		cout << "Infinite Solutions Exists" << endl;
-		return 2;
-	}
-	else if (err == 3)
-	{
-		cout << "No Solution Exists" << endl;
-		return 3;
-	}
-	else {
-		for (int i = 0; i < N; i++)
-			x[i] = b[i] / A[i][i];
-	}
-
-	return 0;
-}
-
-void solvn::checkGauss()
-{
-	vector<vector<double>> A =  {{0, 2, 1},
-								 {1, 1, 2},
-							     {2, 1, 1}};
-	vector<double> b = {4, 6, 7};
-	vector<double> x = {0, 0, 0};
-
-	gauss_plus(A, b, x, 3);
-
-	for (int i = 0; i < 3; i++)
-		cout << "x[" << i << "] = " << x[i] << endl;
-}
-
-double solvn::Get_norm(vector<double>& point1)
-{
-	double r = 0;
-
-	for (int i = 0; i < point1.size(); i++)
-	{
-		r += point1[i] * point1[i];
-	}
-	r = sqrt(r);
-	return r;
-}
-
-int solvn::checkMaxMinTheta(vector<paramWell>& fourWells, vector<double> deltaP)
-{
-	double max_theta;
 	for (int i = 0; i < a_dim; i++)
 	{
-		if (!vFxThetas[i]) {
+		if (!vFxThetas[i]) 
+		{
 			max_theta = abs(ourWells[numWell[i]].theta[numTheta[i]] * dThetaProc);
 			if (abs(deltaP[i]) < max_theta)
 				ourWells[numWell[i]].theta[numTheta[i]] += deltaP[i];
 			else
-				ourWells[numWell[i]].theta[numTheta[i]] += max_theta * deltaP[i] / abs(deltaP[i]);
+			{
+				//gamma_reg[i] *= 10;
+				gamma_reg[i] *= 2;
+				error_code = 1;
+				//ourWells[numWell[i]].theta[numTheta[i]] += max_theta * deltaP[i] / abs(deltaP[i]);
+			}
 		}
 	}
 
+	if (omega_flag) 
+	{
+		ourOmega.prev_paramPoly = ourOmega.paramPoly;
+		ourOmega.prev_paramH2O = ourOmega.paramH2O;
+
+		if (!vFxThetas[a_dim]) // vFxThet.size = 6, a_dim = 6
+		{
+			max_theta = ourOmega.paramPoly + 0.10;
+			min_theta = ourOmega.paramPoly - 0.10;
+			
+			if ((deltaP[a_dim] + ourOmega.paramPoly) < max_theta && (deltaP[a_dim] + ourOmega.paramPoly) > min_theta
+				&& (deltaP[a_dim] + ourOmega.paramPoly) < 1  && (deltaP[a_dim] + ourOmega.paramPoly) > 0)
+			{
+				ourOmega.paramPoly += deltaP[a_dim];
+				ourOmega.paramH2O = 1 - ourOmega.paramPoly;
+			}
+			else
+			{
+				gamma_reg[a_dim] *= 2;
+				error_code = 1;
+				//ourWells[numWell[i]].theta[numTheta[i]] += max_theta * deltaP[i] / abs(deltaP[i]);
+			}
+		}
+	}
+
+	if(error_code == 1)
+	{
+		for (int i = 0; i < a_dim; i++)
+		{
+			if (!vFxThetas[i])
+			{
+				ourWells[numWell[i]].theta[numTheta[i]] = ourWells[numWell[i]].prev_theta[numTheta[i]];
+			}
+		}
+
+		if (omega_flag)
+		{
+			ourOmega.paramPoly = ourOmega.prev_paramPoly;
+			ourOmega.paramH2O = ourOmega.prev_paramH2O;
+		}
+
+		return error_code;
+	}
+
+	// Проверка на выход из диапазона (желательно доработать)
 	for (int i = 0; i < a_dim; i++)
 	{
 		if (fourWells[numWell[i]].theta[numTheta[i]] > absThetaMax && fourWells[numWell[i]].stat == 0)
 		{
 			fourWells[numWell[i]].theta[numTheta[i]] = fourWells[numWell[i]].prev_theta[numTheta[i]];
-			return 1;
+			return 2;
 		}
 		if (fourWells[numWell[i]].theta[numTheta[i]] < -absThetaMax && fourWells[numWell[i]].stat == 1)
 		{
 			fourWells[numWell[i]].theta[numTheta[i]] = fourWells[numWell[i]].prev_theta[numTheta[i]];
-			return 2;
+			return 3;
 		}
 		if (fourWells[numWell[i]].theta[numTheta[i]] < 0 && fourWells[numWell[i]].stat == 0)
 		{
 			fourWells[numWell[i]].theta[numTheta[i]] = fourWells[numWell[i]].prev_theta[numTheta[i]];
-			return 3;
+			return 4;
 		}
 		if (fourWells[numWell[i]].theta[numTheta[i]] > 0 && fourWells[numWell[i]].stat == 1)
 		{
 			fourWells[numWell[i]].theta[numTheta[i]] = fourWells[numWell[i]].prev_theta[numTheta[i]];
-			return 4;
+			return 5;
 		}
 	}
-	return 0;
+	
+	/*
+	for (int i = 0; i < a_dim; i++)
+	{
+		if (!vFxThetas[i])
+		{
+			ourWells[numWell[i]].theta[numTheta[i]] += deltaP[i];
+		}
+		
+	}
+	*/
+
+	return error_code;
 }
 
 void solvn::model_init()
@@ -1352,6 +1742,8 @@ void solvn::model_init()
 
 	fLineParams("");
 	read_well_param(ourWells, nWells, "./properties/");
+	read_phase_param(ourOmega, "./properties/");
+
 	load_data(fWellsAll, TWellsAll, pathComlex, pathDatas);
 	fChkFxThetas("");
 }
@@ -1364,14 +1756,22 @@ void solvn::model_solve()
 
 int main()
 {
+	//paramPhase stfPhase;
 	solvn Solver;
 	system("chcp 1251");
-	//Solver.checkGauss();
+	Solver.checkGauss();
 
 	Solver.model_init();
 	Solver.model_solve();
 	
-	cout << "---***Done!!!***---" << endl;
+	//cout << "---***Done!!!***---" << endl;
+
+	//int test_res = 0;
+	//test_res = test_phase_rw(stfPhase);
+	//cout << "test_res = " << test_res << endl;
+
 	return 0;
 }
+
+
 
