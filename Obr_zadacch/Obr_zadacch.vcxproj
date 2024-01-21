@@ -141,7 +141,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="basic_op.cpp" />
+    <ClCompile Include="check_funcs.cpp" />
+    <ClCompile Include="debug_funcs.cpp" />
+    <ClCompile Include="file_funcs.cpp" />
+    <ClCompile Include="params.cpp" />
+    <ClCompile Include="solver.cpp" />
     <ClCompile Include="Source.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="basic_op.h" />
+    <ClInclude Include="params.h" />
+    <ClInclude Include="solver.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
